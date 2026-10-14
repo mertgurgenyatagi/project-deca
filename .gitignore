@@ -1,0 +1,10 @@
+# Godot engine executables (too large for GitHub; download from godotengine.org)
+Godot_v*.exe
+
+# Godot 4+ generated files
+.godot/
+/android/
+
+# OS
+.DS_Store
+Thumbs.db
