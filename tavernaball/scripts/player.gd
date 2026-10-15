@@ -159,6 +159,30 @@ class OneShot:
 		return i
 
 
+## Movement input and sprint, read from the keyboard each physics tick while
+## `read_input` is on. Turn it off to drive the player from elsewhere (a test,
+## or later a network copy).
+var move_input := Vector2.ZERO
+var sprint_held := false
+var read_input := true
+
+## Read-only state for the dribble (and anything else watching the player).
+var yaw: float:
+	get: return _yaw
+## Ground velocity: x is world X, y is world Z.
+var ground_velocity: Vector2:
+	get: return _ground
+var gait_phase: float:
+	get: return _gait_phase
+var sprint_weight: float:
+	get: return _sprint_weight
+var action: Action:
+	get: return _action
+var action_dir: Vector2:
+	get: return _action_dir
+var skeleton: Skeleton3D:
+	get: return _skeleton
+
 ## Facing angle around Y; 0 faces +Z, the model's forward axis.
 var _yaw := 0.0
 var _yaw_rate := 0.0
@@ -256,8 +280,11 @@ func _stride_offset(anim: Animation) -> float:
 
 
 func _physics_process(delta: float) -> void:
-	var input := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
-	_sprinting = Input.is_action_pressed(&"sprint")
+	if read_input:
+		move_input = Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
+		sprint_held = Input.is_action_pressed(&"sprint")
+	var input := move_input
+	_sprinting = sprint_held
 	var previous_yaw := _yaw
 
 	# An action carries on only while its direction is held.
@@ -428,10 +455,7 @@ func _step_steering(input: Vector2, delta: float) -> void:
 
 	var speed := _ground.length()
 	var target_yaw := atan2(input.x, input.y)
-	var turn_speed := lerpf(pivot_turn_speed, run_turn_speed, clampf(speed / move_speed, 0.0, 1.0))
-	if speed > move_speed:
-		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
-	var max_step := deg_to_rad(turn_speed) * delta
+	var max_step := turn_rate_at(speed) * delta
 	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-turn_sharpness * delta))
 	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
 
@@ -444,6 +468,44 @@ func _step_steering(input: Vector2, delta: float) -> void:
 		rate = sprint_slowdown if target_speed > 0.0 else deceleration
 	speed = move_toward(speed, target_speed, rate * delta)
 	_ground = Vector2(sin(_yaw), cos(_yaw)) * speed
+
+
+## Steering turn rate (rad/s) at a ground speed: pivot rate standing, run
+## rate at jog speed, sprint rate at full sprint.
+func turn_rate_at(speed: float) -> float:
+	var turn_speed := lerpf(pivot_turn_speed, run_turn_speed, clampf(speed / move_speed, 0.0, 1.0))
+	if speed > move_speed:
+		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
+	return deg_to_rad(turn_speed)
+
+
+func top_speed() -> float:
+	return _top_speed()
+
+
+func current_acceleration() -> float:
+	return _acceleration()
+
+
+## Stride phase advance per second at a ground speed, with the jog/sprint
+## blend that speed settles to.
+func phase_rate_at(speed: float) -> float:
+	return _phase_rate(speed, _sprint_weight_at(speed))
+
+
+## Model-space foot and toe points of the gait at a stride phase:
+## [left foot, left toe, right foot, right toe]. Interpolated between samples.
+func gait_feet_at(phase: float, weight: float) -> PackedVector3Array:
+	var at := fposmod(phase, 1.0) * GAIT_SAMPLES
+	var i := int(at) % GAIT_SAMPLES
+	var j := (i + 1) % GAIT_SAMPLES
+	var t := at - floorf(at)
+	var feet := PackedVector3Array()
+	for k in _jog_feet[i].size():
+		var jog := _jog_feet[i][k].lerp(_jog_feet[j][k], t)
+		var sprint := _sprint_feet[i][k].lerp(_sprint_feet[j][k], t)
+		feet.append(jog.lerp(sprint, weight))
+	return feet
 
 
 func _top_speed() -> float:
