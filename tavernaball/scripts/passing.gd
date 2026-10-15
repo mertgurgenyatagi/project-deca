@@ -24,10 +24,10 @@ extends Node
 
 @export_group("Button")
 ## Time to fill the strength bar (s).
-@export var charge_time := 0.475
-## The pass is decided this long after the button is let go (s); the
-## direction can still change until then.
-@export var lock_delay := 0.2
+@export var charge_time := 0.375
+## The pass is decided this long after the button is let go (s; 0 = as it
+## is let go); the direction can still change until then.
+@export var lock_delay := 0.0
 ## A decided pass waits this long for the ball (s).
 @export var queue_time := 4.0
 
@@ -40,23 +40,25 @@ extends Node
 
 @export_group("Pace")
 ## A pass to a teammate arrives at this speed (m/s), whatever the strength.
-@export var arrival_speed := 7.0
+@export var arrival_speed := 10.0
 ## Fastest a pass is struck (m/s).
-@export var max_speed := 18.0
+@export var max_speed := 24.0
 ## With nobody to receive it, the ball rolls this far at an empty bar (m)...
 @export var min_distance := 8.0
 ## ...and this far at a full one (m).
 @export var max_distance := 30.0
 ## Passes struck faster than this (m/s) hop off the ground...
-@export var hop_from := 9.0
+@export var hop_from := 13.0
 ## ...by this much hop (m/s up) per m/s over it...
 @export var hop_per_speed := 0.25
 ## ...up to this (m/s up).
 @export var max_hop := 1.2
 
 @export_group("Kick")
-## The swing starts once the ball is this close to where the foot will meet it (m).
+## The swing starts once the ball is this close to where the foot will meet it (m)...
 @export var set_reach := 0.12
+## ...or, kicking on the run, this close (the ball is steered in during the swing).
+@export var run_reach := 0.25
 ## A plant that takes longer than this (s) swings anyway; the ball is steered in.
 @export var plant_timeout := 1.5
 ## First time: the swing starts if the coming ball will be this close to the
@@ -121,6 +123,50 @@ func pass_to(target: Player) -> void:
 	_decision = {"target": target, "direction": to.normalized(), "strength": 0.0, "left": queue_time}
 
 
+## While a pass meant for this player is on its way, the run that meets it,
+## as [movement input, sprint]; empty otherwise. The player goes for the ball
+## whatever the keys say (player.gd). They aim for where their current run
+## meets the ball's path, since the pass was played there, at the pace that
+## gets them there in time; if that can't be made, for the first point of the
+## path they can reach at a sprint. There, they wait for it, facing it.
+func receive_run() -> Array:
+	var ball := _dribble.ball
+	if ball == null or ball.holder != null or ball.intended != _player:
+		return []
+	var hips := _hips()
+	var run := _player.ground_velocity
+	var jog := _player.move_speed * _player.off_ball_boost
+	var sprint := _player.sprint_speed * _player.off_ball_boost
+	var reach := _dribble.pickup_reach * 0.5
+	var t0 := ball.time_since_release()
+	var meet := Vector2.INF
+	var meet_time := 0.0
+	var closest := INF
+	var earliest := Vector2.INF
+	var earliest_time := 0.0
+	var t := 0.0
+	while t <= 4.0:
+		var at := _ground(ball.roll_position_at(t0 + t))
+		var gap := at.distance_to(hips + run * t)
+		if gap < closest:
+			closest = gap
+			meet = at
+			meet_time = t
+		if earliest == Vector2.INF and hips.distance_to(at) - reach <= sprint * t:
+			earliest = at
+			earliest_time = t
+		t += 1.0 / 30.0
+	if (meet.distance_to(hips) - reach) > sprint * meet_time and earliest != Vector2.INF:
+		meet = earliest
+		meet_time = earliest_time
+	var to := meet - hips
+	if to.length() <= reach:
+		var facing := _ground(ball.position) - hips
+		return [facing.normalized() * 0.001, false]
+	var need := (to.length() - reach) / maxf(meet_time, 0.05)
+	return [to.normalized() * clampf(need / jog, 0.3, 1.0), need > jog]
+
+
 ## Forgets any pass under way (a test resetting the scene).
 func reset_for_test() -> void:
 	_decision = {}
@@ -170,7 +216,10 @@ func _read_button(delta: float) -> void:
 		strength = minf(strength + delta / charge_time, 1.0)
 	elif charging:
 		charging = false
-		_lock_in = lock_delay
+		if lock_delay <= 0.0:
+			_decide()
+		else:
+			_lock_in = lock_delay
 	elif _lock_in >= 0.0:
 		_lock_in -= delta
 		if _lock_in <= 0.0:
@@ -221,7 +270,10 @@ func _begin(first_time: bool) -> void:
 	_kick.released = false
 	_kick.plant = 0.0
 	_decision = {}
-	_player.begin_kick(_aim_yaw(_kick))
+	# A first-time kick plants to meet the ball; with it at the feet, the
+	# player kicks in stride if they can.
+	var yaw := _aim_yaw(_kick)
+	_player.begin_kick(yaw, _dribble.foot_for_kick(yaw), not first_time)
 
 
 func _carry_out(delta: float) -> void:
@@ -232,14 +284,20 @@ func _carry_out(delta: float) -> void:
 	if _kick.released:
 		return
 	if _player.kick_swinging:
-		if _player.kick_time >= _player.kick_contact_time:
+		# Contact on the tick nearest the clip's own contact time.
+		if _player.kick_time >= _player.kick_contact_time - 0.5 * _player.kick_rate * delta:
 			_release()
 		return
 	_player.aim_kick(_aim_yaw(_kick))
 	_kick.plant += delta
 	var ball := _dribble.ball
 	if _dribble.holding():
-		if _player.kick_ready() and (_dribble.ball_meets_foot(set_reach) or _kick.plant > plant_timeout):
+		if _player.kick_running:
+			# In stride: swing so the foot meets the ball at its next touch.
+			if _player.kick_ready() and _dribble.kick_touch_due() \
+					and (_dribble.ball_meets_foot(run_reach) or _kick.plant > plant_timeout):
+				_player.start_swing()
+		elif _player.kick_ready() and (_dribble.ball_meets_foot(set_reach) or _kick.plant > plant_timeout):
 			_player.start_swing()
 	elif ball.holder == null and _kick.first_time:
 		if _player.kick_ready() and _first_time_now():
@@ -261,9 +319,10 @@ func _carry_out(delta: float) -> void:
 ## close to the foot at contact, and closer than if the swing waited a tick).
 func _first_time_now() -> bool:
 	var ball := _dribble.ball
-	var spot := _ground(_dribble.strike_point(_hips(), _player.kick_yaw))
 	var contact := _player.kick_contact_time / _player.kick_rate
-	var t := ball.time_since_release() + contact
+	var spot := _ground(_dribble.strike_point(_player.kick_hips_after(contact), _player.kick_yaw))
+	# The swing starts on the next tick.
+	var t := ball.time_since_release() + contact + get_physics_process_delta_time()
 	var now := _ground(ball.roll_position_at(t)).distance_to(spot)
 	var later := _ground(ball.roll_position_at(t + get_physics_process_delta_time())).distance_to(spot)
 	return now <= first_time_reach and now <= later
@@ -303,7 +362,7 @@ func _release() -> void:
 	var spot := _ground(_dribble.strike_point(_hips(), _player.yaw))
 	kick_log.append({"time": _clock, "target": target, "speed": speed, "direction": direction,
 			"first_time": _kick.get("struck_first_time", false), "error": from.distance_to(spot)})
-	_dribble.release(Vector3(direction.x, 0.0, direction.y) * speed, hop)
+	_dribble.release(Vector3(direction.x, 0.0, direction.y) * speed, hop, target)
 	_play_sound(ball.position, speed)
 
 

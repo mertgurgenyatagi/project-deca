@@ -72,8 +72,8 @@ func _run() -> void:
 			var r: Dictionary = await _scenario(s, offset)
 			runs.append(r)
 			if verbose:
-				print("   offset %.2f: exec %.2f miss %.1f cm to %s first %s strike %.1f overlap %d/%.1fcm slip %.2f" % [offset,
-						r.exec, r.miss * 100.0, r.to, r.first, r.speed, r.overlap, r.depth * 100.0, r.slip_sum / maxf(r.slip_n, 1)])
+				print("   offset %.2f: exec %.2f miss %.1f cm to %s first %s strike %.1f moving %.1f stride %s overlap %d/%.1fcm slip %.2f" % [offset,
+						r.exec, r.miss * 100.0, r.to, r.first, r.speed, r.contact_speed, r.in_stride, r.overlap, r.depth * 100.0, r.slip_sum / maxf(r.slip_n, 1)])
 		_report(s, runs)
 	print("PASS_OK" if failures.is_empty() else "PASS_FAIL  " + ", ".join(failures))
 	quit()
@@ -219,6 +219,8 @@ func _press(aim: Vector2, power: float, sprint: bool, r: Dictionary, keys_move :
 		r.kicked = false
 		return
 	r.exec = t - passing.lock_delay
+	r.contact_speed = player.ground_velocity.length()
+	r.in_stride = player._kick_layer > 0.5
 	var kick: Dictionary = passing.kick_log[-1]
 	r.miss = kick.error
 	r.first = kick.first_time
@@ -282,7 +284,7 @@ func _measure(r: Dictionary) -> void:
 		print("      speed %.2f yaw err %5.1f  ball gap %.2f  ball v %.2f  ball rel (%.2f, %.2f) swing %s ready %s%s" % [
 				player.ground_velocity.length(), rad_to_deg(angle_difference(player.yaw, player.kick_yaw)),
 				Vector2(ball.position.x - spot.x, ball.position.z - spot.z).length(), ball.velocity.length(),
-				rel.x, rel.y, player.kick_swinging, player.kick_ready(), toes])
+				rel.x, rel.y, player.kick_swinging, player.kick_ready(), toes + "  plan %s  acc %s holder %s first %s  due %s meets %s next %.2f phase %.2f" % [str(dribble._target()) if ball.holder == player else "-", ball.acceleration.snapped(Vector3(0.1,0.1,0.1)), ball.holder != null, dribble._first_time, dribble.kick_touch_due(), dribble.ball_meets_foot(passing.run_reach), dribble._next_touch_phase, dribble._phase]])
 	if kicking and ball.holder == player:
 		var depth := _foot_depth()
 		if depth > 0.0 and not player.kick_swinging:
@@ -291,7 +293,7 @@ func _measure(r: Dictionary) -> void:
 	for f in feet:
 		var toe: Vector3 = skel.global_transform * skel.get_bone_global_pose(f[1]).origin
 		# The kicking (right) foot starts its swing low: that is not a slide.
-		var swinging_foot: bool = player.kick_swinging and f == feet[Player.KICK_LEG]
+		var swinging_foot: bool = player.kick_swinging and f == feet[player.kick_foot]
 		if kicking and not swinging_foot and _last_toes.has(f[1]) and toe.y < 0.02 and _last_toes[f[1]].y < 0.02:
 			r.slip_sum += Vector2(toe.x - _last_toes[f[1]].x, toe.z - _last_toes[f[1]].z).length() / TICK
 			r.slip_n += 1
@@ -338,6 +340,7 @@ func _reset(p: Player, at: Vector2, facing: Vector2) -> void:
 	p._ground = Vector2.ZERO
 	p._action = 0
 	p._kick_time = -1.0
+	p._kick_layer = 0.0
 	for clip in p._one_shots:
 		clip.playing = false
 		clip.fade = 0.0
@@ -376,7 +379,7 @@ func _hips(p: Node3D) -> Vector2:
 # --- Results --------------------------------------------------------------------
 
 func _new_result() -> Dictionary:
-	return {"kicked": true, "exec": 0.0, "miss": 0.0, "first": false, "speed": 0.0, "to": "none",
+	return {"kicked": true, "exec": 0.0, "contact_speed": 0.0, "in_stride": false, "miss": 0.0, "first": false, "speed": 0.0, "to": "none",
 			"arrive": 0.0, "arrive_speed": 0.0, "rolled": 0.0, "overlap": 0, "depth": 0.0,
 			"slip_sum": 0.0, "slip_n": 0, "jump": 0.0}
 
@@ -395,6 +398,8 @@ func _report(s: Dictionary, runs: Array) -> void:
 	var rolled := []
 	var firsts := 0
 	var kick_speeds := []
+	var contact_speeds := []
+	var strides := 0
 	for r in runs:
 		if not r.kicked:
 			failures.append("%s: no kick" % s.name)
@@ -412,6 +417,9 @@ func _report(s: Dictionary, runs: Array) -> void:
 		speeds.append(r.arrive_speed)
 		rolled.append(r.rolled)
 		kick_speeds.append(r.speed)
+		contact_speeds.append(r.contact_speed)
+		if r.in_stride:
+			strides += 1
 		if r.first:
 			firsts += 1
 	if execs.is_empty():
@@ -423,9 +431,9 @@ func _report(s: Dictionary, runs: Array) -> void:
 	var kind := ""
 	if s.has("first_time"):
 		kind = "first time %d/%d" % [firsts, runs.size()]
-	print("%-18s %5.2f / %5.2f %5.1f / %5.1f %4d/%d %15s %4d/%4.1fcm %6.2f %6.2f %s strike %4.1fm/s" % [s.name, execs[execs.size() / 2], execs[-1],
+	print("%-18s %5.2f / %5.2f %5.1f / %5.1f %4d/%d %15s %4d/%4.1fcm %6.2f %6.2f %s strike %4.1fm/s, moving %3.1fm/s, %d/%d in stride" % [s.name, execs[execs.size() / 2], execs[-1],
 			misses[misses.size() / 2] * 100.0, misses[-1] * 100.0, hits, runs.size(), arrival, overlap, depth * 100.0,
-			slip_sum / maxf(slip_n, 1), jump * 100.0, kind, _avg(kick_speeds)])
+			slip_sum / maxf(slip_n, 1), jump * 100.0, kind, _avg(kick_speeds), _avg(contact_speeds), strides, runs.size()])
 	if hits < runs.size():
 		failures.append("%s: went to the wrong player" % s.name)
 	if jump > 0.01:

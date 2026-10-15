@@ -26,8 +26,15 @@ const GRAVITY := 9.8
 ## A bounce slower than this (m/s) settles the ball on the ground.
 const SETTLE_SPEED := 0.3
 
-## Who has the ball (a player), or null when it is loose.
-var holder: Node = null
+## Who has the ball (a player), or null when it is loose. Taking it ends any
+## pass meant for someone.
+var holder: Node = null:
+	set(value):
+		holder = value
+		if value != null:
+			intended = null
+## Whom the ball was last passed to, until someone takes it (null: nobody).
+var intended: Node = null
 ## Who last let the ball go, and so may not take it straight back.
 var last_releaser: Node = null
 var velocity := Vector3.ZERO
@@ -50,9 +57,11 @@ func _ready() -> void:
 
 
 ## Lets the ball roll freely from `at` with velocity `vel` (only its ground
-## part counts), hopping off the ground at `hop` m/s. `by` is whoever let it go.
-func release(at: Vector3, vel: Vector3, by: Node = null, hop := 0.0) -> void:
+## part counts), hopping off the ground at `hop` m/s. `by` is whoever let it
+## go, `to` whom it is passed to, if anyone.
+func release(at: Vector3, vel: Vector3, by: Node = null, hop := 0.0, to: Node = null) -> void:
 	holder = null
+	intended = to
 	last_releaser = by
 	_release_position = Vector3(at.x, radius, at.z)
 	_release_velocity = Vector3(vel.x, 0.0, vel.z)

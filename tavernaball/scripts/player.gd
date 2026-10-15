@@ -115,10 +115,23 @@ enum Action { NONE, BRAKE, PUSH_OFF, START, KICK }
 ## Jog strides are this share of the clips' own length at the same speed:
 ## quicker, shorter steps (the sprint keeps its stride).
 @export var jog_stride := 0.75
+## Without the ball, speeds and accelerations are this many times those with it.
+@export var off_ball_boost := 1.15
 
 @export_group("Kick")
-## Braking (and stepping) while planting for a kick (m/s²). The plant is timed
-## to stop beside the ball (see Dribble.plant_point).
+## A kick on the run: a player at least this fast (m/s), kicking within this
+## many degrees of where they face, kicks in stride...
+@export var kick_run_min_speed := 1.0
+@export var kick_run_turn := 100.0
+## ...easing to no faster than this meanwhile (m/s)...
+@export var kick_run_speed := 2.6
+## ...and swings once facing within this many degrees of the kick. The kicking
+## leg plays the kick over the running legs, and the kick is over at this
+## point in the clip (s), with the leg coming back down.
+@export var kick_run_angle := 30.0
+@export var kick_run_end := 0.36
+## Otherwise the player plants for the kick, braking (and stepping) at this
+## (m/s²), timed to stop beside the ball (see Dribble.plant_point).
 @export var kick_brake := 9.0
 ## A player slower than this steps up to a ball ahead at it (m/s).
 @export var kick_step_speed := 1.2
@@ -157,9 +170,14 @@ enum Action { NONE, BRAKE, PUSH_OFF, START, KICK }
 const IDLE_ANIMATION := &"idle/idle"
 const JOG_ANIMATION := &"jog_forward/jog_forward"
 const SPRINT_ANIMATION := &"sprint/sprint"
-const KICK_ANIMATION := &"pass_kick/pass_kick"
-## The kick clip kicks with this leg (index into LEG_CHAINS: 1 = right).
-const KICK_LEG := 1
+## The kick with each foot (index into LEG_CHAINS: 0 = left, 1 = right). The
+## clip kicks with the right; the left is its mirror (mixamo_kick_import.gd).
+const KICK_ANIMATIONS := [&"pass_kick/pass_kick_mirror", &"pass_kick/pass_kick"]
+## Per foot, the AnimationTree blends showing the whole kick and the kicking leg alone.
+const KICK_BLENDS := [&"parameters/KickLBlend/blend_amount", &"parameters/KickBlend/blend_amount"]
+const KICK_LEG_BLENDS := [&"parameters/KickLegLBlend/blend_amount", &"parameters/KickLegBlend/blend_amount"]
+const KICK_SEEKS := [&"parameters/KickLSeek/seek_request", &"parameters/KickSeek/seek_request"]
+const KICK_LEG_SEEKS := [&"parameters/KickLegLSeek/seek_request", &"parameters/KickLegSeek/seek_request"]
 const HIPS_BONE := "mixamorig_Hips"
 ## Leg chains below the hips; the foot and toe of each are compared when
 ## matching strides, and the left foot's forward reach marks stride phase 0.
@@ -315,14 +333,21 @@ var stride: float:
 ## swing), and the clip's fade.
 var _kick_yaw := 0.0
 var _kick_time := -1.0
+## Kicking on the run (rather than planted), and how much the kick shows as
+## just the kicking leg over the running legs (1) rather than whole (0).
+var _kick_running := false
+var _kick_layer := 0.0
 var _kick_shown := 0.0
 var _kick_fade := 0.0
 var _kick_length := 0.0
 ## Clip time when the kicking foot meets the ball, and that foot's ankle and
 ## toe then (model space).
 var _kick_contact := 0.0
-var _kick_ankle := Vector3.ZERO
-var _kick_toe := Vector3.ZERO
+## Per foot, the kicking foot's ankle and toe as it meets the ball.
+var _kick_ankle := [Vector3.ZERO, Vector3.ZERO]
+var _kick_toe := [Vector3.ZERO, Vector3.ZERO]
+## The foot the kick is made with (0 left, 1 right).
+var _kick_foot := 1
 ## How much lower the kick clip's feet stand than the idle's (it comes from a
 ## different rig); the model is lifted by this while the kick shows.
 var _kick_lift := 0.0
@@ -335,13 +360,18 @@ var kick_time: float:
 ## Clip time at which the foot meets the ball.
 var kick_contact_time: float:
 	get: return _kick_contact
+var kick_foot: int:
+	get: return _kick_foot
 var kick_yaw: float:
 	get: return _kick_yaw
+var kick_running: bool:
+	get: return _action == Action.KICK and _kick_running
 
 @onready var _model: Node3D = $Model
 @onready var _skeleton: Skeleton3D = $Model/Character/Skeleton3D
 @onready var _anim_tree: AnimationTree = $AnimationTree
 @onready var _dribble: Dribble = get_node_or_null(^"Dribble")
+@onready var _passing: Passing = get_node_or_null(^"Passing")
 
 
 func _ready() -> void:
@@ -366,38 +396,46 @@ func _ready() -> void:
 	_idle_feet = _feet_at(_idle_anim, 0.0)
 	_walk_turn = _make_one_shot("Turn", &"turn_180/turn_180", hip_height)
 	_sprint_start = _make_one_shot("Start", &"sprint_start/sprint_start", hip_height)
-	_find_kick_contact(_anim_tree.get_animation(KICK_ANIMATION))
+	for foot in 2:
+		_find_kick_contact(_anim_tree.get_animation(KICK_ANIMATIONS[foot]), foot)
 	_yaw = _model.rotation.y
 	add_to_group(&"players")
 
 
-## Where the kick clip's foot meets the ball: the moment the kicking toe moves
+## Where a kick clip's foot meets the ball: the moment the kicking toe moves
 ## forward fastest, early in the swing.
-func _find_kick_contact(anim: Animation) -> void:
+func _find_kick_contact(anim: Animation, foot: int) -> void:
 	const STEP := 1.0 / 240.0
 	_kick_length = anim.length
 	var stance := _feet_at(anim, 0.0)
 	var idle := _feet_at(_idle_anim, 0.0)
 	_kick_lift = minf(idle[1].y, idle[3].y) - minf(stance[1].y, stance[3].y)
 	var best := -INF
-	var last := _feet_at(anim, 0.0)[KICK_LEG * 2 + 1]
+	var last := _feet_at(anim, 0.0)[foot * 2 + 1]
 	var t := STEP
 	while t < anim.length * 0.5:
 		var feet := _feet_at(anim, t)
-		var toe := feet[KICK_LEG * 2 + 1]
+		var toe := feet[foot * 2 + 1]
 		var forward := (toe.z - last.z) / STEP
 		if forward > best:
 			best = forward
 			_kick_contact = t
-			_kick_ankle = feet[KICK_LEG * 2]
-			_kick_toe = toe
+			_kick_ankle[foot] = feet[foot * 2]
+			_kick_toe[foot] = toe
 		last = toe
 		t += STEP
 
 
-## Model-space ankle and toe of the kicking foot as it meets the ball.
-func kick_contact_feet() -> Array[Vector3]:
-	return [_kick_ankle, _kick_toe]
+## Model-space ankle and toe of a foot (the kick's, by default) as it meets the ball.
+func kick_contact_feet(foot := -1) -> Array[Vector3]:
+	var f := _kick_foot if foot < 0 else foot
+	return [_kick_ankle[f], _kick_toe[f]]
+
+
+## Kicks with `foot` (0 left, 1 right); only before the swing.
+func set_kick_foot(foot: int) -> void:
+	if _kick_time < 0.0:
+		_kick_foot = foot
 
 
 func _make_one_shot(node_name: String, animation: StringName, hip_height: float) -> OneShot:
@@ -433,6 +471,11 @@ func _physics_process(delta: float) -> void:
 		# With the ball, changes of direction or pace wait for a touch.
 		input = _dribble.gate_input(move_input)
 		_sprinting = _dribble.gate_sprint(sprint_held)
+	var receiving := _passing.receive_run() if _passing else []
+	if not receiving.is_empty():
+		# A pass is on its way to this player: they go to meet it, whatever the keys say.
+		input = receiving[0]
+		_sprinting = receiving[1]
 	if _action == Action.KICK:
 		# Committed to the kick: the keys wait until it is over.
 		input = Vector2.ZERO
@@ -505,14 +548,19 @@ func _pivot_share() -> float:
 	return agile_pivot * agility_at(_ground.length()) if _action in [Action.NONE, Action.KICK] else 0.0
 
 
-## Starts a kick facing `yaw`: the player plants and turns, ignoring the keys
-## until the kick is over. The swing waits for `start_swing`.
-func begin_kick(yaw: float) -> void:
+## Starts a kick facing `yaw`, ignoring the keys until it is over. A player
+## on the move kicking not far off where they face (and `on_the_run` allowed)
+## kicks in stride; otherwise they plant and turn. The swing waits for
+## `start_swing`.
+func begin_kick(yaw: float, foot: int, on_the_run := true) -> void:
 	if _action != Action.NONE and _action != Action.KICK:
 		_end_action()
 	_action = Action.KICK
 	_kick_yaw = yaw
 	_kick_time = -1.0
+	_kick_foot = foot
+	_kick_running = on_the_run and _ground.length() >= kick_run_min_speed \
+			and absf(angle_difference(_yaw, yaw)) <= deg_to_rad(kick_run_turn)
 
 
 ## Turns the kick toward a new direction (until the swing starts).
@@ -521,11 +569,33 @@ func aim_kick(yaw: float) -> void:
 		_kick_yaw = yaw
 
 
-## Whether the plant is done: slow enough and facing the kick.
+## Whether the swing may start: facing the kick, and planted (slow enough)
+## unless kicking on the run.
 func kick_ready() -> bool:
-	return _action == Action.KICK and _kick_time < 0.0 \
-			and _ground.length() <= kick_entry_speed \
-			and absf(angle_difference(_yaw, _kick_yaw)) <= deg_to_rad(kick_entry_angle)
+	if _action != Action.KICK or _kick_time >= 0.0:
+		return false
+	var off := absf(angle_difference(_yaw, _kick_yaw))
+	if _kick_running:
+		return off <= deg_to_rad(kick_run_angle)
+	return _ground.length() <= kick_entry_speed and off <= deg_to_rad(kick_entry_angle)
+
+
+## Where the hips will be (ground x/z) `t` seconds into a kick from now:
+## running on, or braking to a stop when planted.
+func kick_hips_after(t: float) -> Vector2:
+	var at := Vector2(global_position.x, global_position.z)
+	var speed := _ground.length()
+	if speed == 0.0:
+		return at
+	if _kick_running:
+		return at + _ground * t
+	var travel := speed * speed / (2.0 * kick_brake) if speed < kick_brake * t else speed * t - 0.5 * kick_brake * t * t
+	return at + _ground / speed * travel
+
+
+## Speed a kick on the run eases to from `speed`.
+func kick_run_pace(speed: float) -> float:
+	return minf(speed, kick_run_speed)
 
 
 ## Roughly how long until the foot would meet the ball if a kick facing `yaw`
@@ -540,6 +610,7 @@ func kick_lead_time(yaw: float) -> float:
 func start_swing() -> void:
 	if _action == Action.KICK and _kick_time < 0.0:
 		_kick_time = 0.0
+		_kick_layer = 1.0 if _kick_running else 0.0
 
 
 ## Abandons a kick before its swing (the ball never came).
@@ -554,10 +625,16 @@ func face(yaw: float) -> void:
 	_model.rotation.y = yaw
 
 
-## The plant: braking in a straight line while turning to face the kick (about
-## the planted foot when slow, see `_pivot_offset`), then the swing. Where the
-## Dribble says the plant should be, the braking is timed to stop level with it.
+## Into the kick, then the swing:
+## - On the run: steering toward the kick at the usual turn rates, easing off
+##   to `kick_run_speed`.
+## - Planted: braking in a straight line while turning to face the kick
+##   (about the planted foot when slow, see `_pivot_offset`). Where the Dribble
+##   says the plant should be, the braking is timed to stop level with it.
 func _step_kick(delta: float) -> void:
+	if _kick_running:
+		_step_kick_run(delta)
+		return
 	var plant := _dribble.plant_point if _dribble else Vector2.INF
 	var to := plant - Vector2(global_position.x, global_position.z) if plant != Vector2.INF else Vector2.ZERO
 	var facing := Vector2(sin(_yaw), cos(_yaw))
@@ -572,9 +649,23 @@ func _step_kick(delta: float) -> void:
 	var max_step := turn_rate_at(speed) * delta
 	var step := _turn_toward(_yaw, _kick_yaw) * (1.0 - exp(-turn_sharpness_at(speed) * delta))
 	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
+	_advance_swing(delta, _kick_length)
+
+
+func _step_kick_run(delta: float) -> void:
+	var speed := move_toward(_ground.length(), kick_run_pace(_ground.length()), kick_brake * delta)
+	var max_step := turn_rate_at(speed) * delta
+	var step := _turn_toward(_yaw, _kick_yaw) * (1.0 - exp(-turn_sharpness_at(speed) * delta))
+	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
+	var travel := _yaw + _turn_toward(_yaw, _kick_yaw) * cut_at(speed)
+	_ground = Vector2(sin(travel), cos(travel)) * speed
+	_advance_swing(delta, kick_run_end)
+
+
+func _advance_swing(delta: float, end: float) -> void:
 	if _kick_time >= 0.0:
 		_kick_time += kick_rate * delta
-		if _kick_time >= _kick_length:
+		if _kick_time >= end:
 			_action = Action.NONE
 			_kick_time = -1.0
 
@@ -615,7 +706,7 @@ func _begin_turnback(input: Vector2) -> void:
 func _choose_clip_entry() -> void:
 	var clip := _turn_clip
 	var speed := _ground.length()
-	var braking_left := speed * speed / (2.0 * turnback_brake)
+	var braking_left := speed * speed / (2.0 * _turnback_brake())
 	var earliest := maxf(clip.stop - braking_left, 0.0)
 	var latest_progress := clip.sample(clip.progress, earliest) + clip_entry_window
 	var best := INF
@@ -627,10 +718,10 @@ func _choose_clip_entry() -> void:
 		if entry > clip.stop or clip.progress[i] > latest_progress:
 			break
 		var before_entry := braking_left - (clip.stop - entry)
-		var entry_speed := sqrt(maxf(speed * speed - 2.0 * turnback_brake * before_entry, 0.0))
-		var into_fade := _travel(entry_speed, -turnback_brake, clip_fade_in_time * 0.5)
-		var phase := _gait_phase + _gait_advance(speed, -turnback_brake, before_entry + into_fade)
-		var gait := _gait_feet(phase, _sprint_weight_at(maxf(entry_speed - turnback_brake * clip_fade_in_time * 0.5, 0.0)))
+		var entry_speed := sqrt(maxf(speed * speed - 2.0 * _turnback_brake() * before_entry, 0.0))
+		var into_fade := _travel(entry_speed, -_turnback_brake(), clip_fade_in_time * 0.5)
+		var phase := _gait_phase + _gait_advance(speed, -_turnback_brake(), before_entry + into_fade)
+		var gait := _gait_feet(phase, _sprint_weight_at(maxf(entry_speed - _turnback_brake() * clip_fade_in_time * 0.5, 0.0)))
 		var gap := _feet_gap(gait, clip.feet[clip.index(entry + into_fade)])
 		if gap < best:
 			best = gap
@@ -641,12 +732,12 @@ func _choose_clip_entry() -> void:
 
 ## Brakes along the old direction while the body turns toward the new one.
 func _step_brake(delta: float) -> void:
-	_ground = _ground.move_toward(Vector2.ZERO, turnback_brake * delta)
+	_ground = _ground.move_toward(Vector2.ZERO, _turnback_brake() * delta)
 	var speed := _ground.length()
 	if _turn_clip:
 		# Follow the clip once the braking left matches its run-in to its stop.
 		var clip := _turn_clip
-		clip.distance = clip.stop - speed * speed / (2.0 * turnback_brake)
+		clip.distance = clip.stop - speed * speed / (2.0 * _turnback_brake())
 		clip.playing = clip.distance >= _clip_entry
 		_yaw = wrapf(_action_yaw + _action_turn * _turn_share(clip.distance), -PI, PI)
 	else:
@@ -799,7 +890,17 @@ func agility_at(speed: float) -> float:
 ## Acceleration at a speed (sprint or not): a careful first step when agile.
 func acceleration_at(speed: float, sprinting: bool) -> float:
 	var rate := sprint_acceleration if sprinting else acceleration
-	return rate * lerpf(1.0, agile_acceleration, agility_at(speed))
+	return rate * _pace() * lerpf(1.0, agile_acceleration, agility_at(speed))
+
+
+## Without the ball the player is quicker: speeds, accelerations and turnback
+## braking all scale by `off_ball_boost`, so turns take the same time.
+func _pace() -> float:
+	return 1.0 if _dribble and _dribble.holding() else off_ball_boost
+
+
+func _turnback_brake() -> float:
+	return turnback_brake * _pace()
 
 
 ## How sharply turns settle at a speed (crisper when agile).
@@ -870,7 +971,7 @@ func gait_feet_at(phase: float, weight: float) -> PackedVector3Array:
 
 
 func _top_speed() -> float:
-	return sprint_speed if _sprinting else move_speed
+	return (sprint_speed if _sprinting else move_speed) * _pace()
 
 
 func _acceleration() -> float:
@@ -896,7 +997,7 @@ func _travel(speed: float, accel: float, time: float) -> float:
 
 
 func _sprint_weight_at(speed: float) -> float:
-	return clampf(inverse_lerp(move_speed, sprint_speed, speed), 0.0, 1.0)
+	return clampf(inverse_lerp(move_speed * _pace(), sprint_speed * _pace(), speed), 0.0, 1.0)
 
 
 ## Stride phase advance per second at a ground speed and jog/sprint weight.
@@ -1029,9 +1130,15 @@ func _update_animation(delta: float) -> void:
 	# The kick plays in time once the swing starts, over everything else; after
 	# the follow-through it holds its last pose while fading back out.
 	var swinging := kick_swinging
-	_kick_shown = _kick_time if swinging else _kick_length
+	if swinging:
+		_kick_shown = _kick_time
 	_kick_fade = move_toward(_kick_fade, 1.0 if swinging else 0.0, delta / (kick_fade_in if swinging else kick_fade_out))
-	_anim_tree.set(&"parameters/KickBlend/blend_amount", smoothstep(0.0, 1.0, _kick_fade))
-	_model.position.y = _kick_lift * smoothstep(0.0, 1.0, _kick_fade)
+	var shown := smoothstep(0.0, 1.0, _kick_fade)
+	for foot in 2:
+		var on := shown if foot == _kick_foot else 0.0
+		_anim_tree.set(KICK_BLENDS[foot], on * (1.0 - _kick_layer))
+		_anim_tree.set(KICK_LEG_BLENDS[foot], on * _kick_layer)
+	_model.position.y = _kick_lift * shown * (1.0 - _kick_layer)
 	if _kick_fade > 0.0:
-		_anim_tree.set(&"parameters/KickSeek/seek_request", _kick_shown)
+		_anim_tree.set(KICK_SEEKS[_kick_foot], _kick_shown)
+		_anim_tree.set(KICK_LEG_SEEKS[_kick_foot], _kick_shown)

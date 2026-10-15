@@ -30,7 +30,61 @@ func _post_import(scene: Node) -> Object:
 			anim.loop_mode = Animation.LOOP_NONE
 			_center_hips(anim, hips_path, hips_height)
 			library.rename_animation(anim_name, clip_name)
+			library.add_animation(clip_name + "_mirror", _mirrored(anim, skeleton, str(scene.get_path_to(skeleton))))
 	return scene
+
+
+## The same kick with the other foot: every bone's pose reflected across the
+## body's centre plane (x → −x) in skeleton space, left and right swapped.
+## Reflecting global rotations, not local ones, keeps it right whatever the
+## bones' own axes. Sampled at 30 fps.
+func _mirrored(anim: Animation, skeleton: Skeleton3D, skeleton_path: String) -> Animation:
+	var mirror := Animation.new()
+	mirror.length = anim.length
+	mirror.loop_mode = Animation.LOOP_NONE
+	var bones := skeleton.get_bone_count()
+	var rotation_tracks := []
+	var twin := []
+	for b in bones:
+		var name := skeleton.get_bone_name(b)
+		rotation_tracks.append(anim.find_track(NodePath("%s:%s" % [skeleton_path, name]), Animation.TYPE_ROTATION_3D))
+		twin.append(skeleton.find_bone(name.replace("Left", "#").replace("Right", "Left").replace("#", "Right")))
+	var out_tracks := []
+	for b in bones:
+		var track := mirror.add_track(Animation.TYPE_ROTATION_3D)
+		mirror.track_set_path(track, NodePath("%s:%s" % [skeleton_path, skeleton.get_bone_name(b)]))
+		out_tracks.append(track)
+	var hips := skeleton.find_bone(HIPS_BONE)
+	var hips_in := anim.find_track(NodePath("%s:%s" % [skeleton_path, HIPS_BONE]), Animation.TYPE_POSITION_3D)
+	var hips_out := mirror.add_track(Animation.TYPE_POSITION_3D)
+	mirror.track_set_path(hips_out, NodePath("%s:%s" % [skeleton_path, HIPS_BONE]))
+	var flip := Basis.FLIP_X
+	var count := roundi(anim.length * 30.0) + 1
+	for i in count:
+		var t := minf(i / 30.0, anim.length)
+		# Global rotations of the clip's pose, parents before children.
+		var global := []
+		global.resize(bones)
+		for b in bones:
+			var local := skeleton.get_bone_rest(b).basis.get_rotation_quaternion()
+			if rotation_tracks[b] != -1:
+				local = anim.rotation_track_interpolate(rotation_tracks[b], t)
+			var parent := skeleton.get_bone_parent(b)
+			global[b] = Basis(local) if parent < 0 else global[parent] * Basis(local)
+		# Each bone takes its twin's pose, reflected, then back to local.
+		var reflected := []
+		reflected.resize(bones)
+		for b in bones:
+			var source: int = twin[b] if twin[b] != -1 else b
+			reflected[b] = flip * (global[source] as Basis) * flip
+		for b in bones:
+			var parent := skeleton.get_bone_parent(b)
+			var local_basis: Basis = reflected[b] if parent < 0 else (reflected[parent] as Basis).inverse() * reflected[b]
+			mirror.rotation_track_insert_key(out_tracks[b], t, local_basis.orthonormalized().get_rotation_quaternion())
+		if hips_in != -1 and hips != -1:
+			var p := anim.position_track_interpolate(hips_in, t)
+			mirror.position_track_insert_key(hips_out, t, Vector3(-p.x, p.y, p.z))
+	return mirror
 
 
 func _center_hips(anim: Animation, hips_path: NodePath, hips_height: float) -> void:

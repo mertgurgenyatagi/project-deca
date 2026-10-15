@@ -184,6 +184,8 @@ var _effective_input := Vector2.ZERO
 var _was_pending := false
 ## Taken on the move for a first-time kick: the ball keeps its pace into the foot.
 var _first_time := false
+## Kicking on the run: the kick's touch has been picked.
+var _kick_scheduled := false
 
 @onready var _player: Player = get_parent()
 @onready var _passing: Passing = get_parent().get_node_or_null(^"Passing")
@@ -322,12 +324,12 @@ func can_take(b: Ball) -> bool:
 
 
 ## Lets the ball go from the player's feet (the debug knock, passes, later
-## shots), hopping off the ground at `hop` m/s.
-func release(velocity: Vector3, hop := 0.0) -> void:
+## shots), hopping off the ground at `hop` m/s, passed `to` someone or not.
+func release(velocity: Vector3, hop := 0.0, to: Node = null) -> void:
 	if ball and ball.holder == _player:
 		_wait_for_clear = true
 		_first_time = false
-		ball.release(ball.position, velocity, _player, hop)
+		ball.release(ball.position, velocity, _player, hop, to)
 
 
 ## Takes a loose ball on the move for a first-time kick: no touch, the ball
@@ -436,8 +438,17 @@ func _sim_step(s: Sim, dt: float) -> void:
 			s.velocity = p.action_dir * speed
 			s.yaw = atan2(p.action_dir.x, p.action_dir.y)
 		Player.Action.KICK:
-			speed = move_toward(speed, 0.0, p.kick_brake * dt)
-			s.velocity = s.velocity.normalized() * speed
+			if p.kick_running:
+				# Steering into the kick in stride, easing off (as player.gd).
+				speed = move_toward(speed, p.kick_run_pace(speed), p.kick_brake * dt)
+				var max_turn := p.turn_rate_at(speed) * dt
+				var turn := angle_difference(s.yaw, p.kick_yaw) * (1.0 - exp(-p.turn_sharpness_at(speed) * dt))
+				s.yaw = wrapf(s.yaw + clampf(turn, -max_turn, max_turn), -PI, PI)
+				var travel := s.yaw + angle_difference(s.yaw, p.kick_yaw) * p.cut_at(speed)
+				s.velocity = Vector2(sin(travel), cos(travel)) * speed
+			else:
+				speed = move_toward(speed, 0.0, p.kick_brake * dt)
+				s.velocity = s.velocity.normalized() * speed
 		_:
 			if input == Vector2.ZERO:
 				speed = move_toward(speed, 0.0, p.deceleration * dt)
@@ -583,14 +594,35 @@ func _turnback_target() -> Array:
 ##   player stops; if its way there would pass through the player, it goes
 ##   round the side the body turns toward first.
 ## - Planted and turned, the ball is brought the last bit to the foot.
+## - Kicking on the run, the kick is the kicking foot's next touch (see
+##   `_schedule_kick_touch`): the ball goes where that foot will meet it in
+##   stride, arriving at about the player's pace, as for any touch.
 ## - Once the swing starts, it is steered to meet the foot at contact.
 func _strike_target() -> Array:
 	var offset := _strike_offset()
 	plant_point = Vector2.INF
+	var v := _player.ground_velocity
 	if _player.kick_swinging:
-		var left := maxf((_player.kick_contact_time - _player.kick_time) / _player.kick_rate, PREDICT_STEP)
-		var arrival := ball.velocity if _first_time else Vector3.ZERO
-		return [_world(_hips(), _player.yaw, offset), left, arrival]
+		# Contact is the tick nearest the clip's contact time (see Passing), and
+		# the ball moves at the end of each tick: plan for whole ticks.
+		var tick := get_physics_process_delta_time()
+		var left := maxf(roundf((_player.kick_contact_time - _player.kick_time) / _player.kick_rate / tick), 1.0) * tick
+		var target := _world(_player.kick_hips_after(left), _player.yaw, offset)
+		var arrival := Vector3.ZERO
+		if _first_time:
+			# A coming ball keeps going into the foot, at the pace an even
+			# slowing over the way left gives.
+			var to := target - ball.position
+			to.y = 0.0
+			if to.length() > 0.001:
+				arrival = to.normalized() * maxf(2.0 * to.length() / left - ball.velocity.length(), 0.0)
+		elif _player.kick_running:
+			arrival = Vector3(v.x, 0.0, v.y) * arrival_speed_ratio
+		return [target, left, arrival]
+	if _player.kick_running:
+		var s := _predict_to_phase(_next_touch_phase)
+		var arrival := Vector3(s.velocity.x, 0.0, s.velocity.y) * arrival_speed_ratio
+		return [_world(s.position, s.yaw, offset), maxf(s.time, PREDICT_STEP), arrival]
 	var yaw := _player.kick_yaw if _player.action == Player.Action.KICK else _passing.planned_yaw()
 	if _player.kick_ready():
 		return [_world(_kick_stop(), yaw, offset), SET_TIME, Vector3.ZERO]
@@ -628,30 +660,59 @@ func _kick_stop() -> Vector2:
 
 
 ## Whether a swing starting now would meet the ball: where the kicking foot
-## will be at contact (the plant braking on meanwhile) against where the ball
-## will be, within `reach` (m).
+## will be at contact (planted: the plant braking on meanwhile; on the run:
+## running on) against where the ball will be, within `reach` (m).
 func ball_meets_foot(reach: float) -> bool:
 	var t := _player.kick_contact_time / _player.kick_rate
-	var v := _player.ground_velocity
-	var speed := v.length()
-	var hips := _hips()
-	if speed > 0.0:
-		var brake := _player.kick_brake
-		hips += v / speed * (speed * speed / (2.0 * brake) if speed < brake * t else speed * t - 0.5 * brake * t * t)
-	var spot := _ground(strike_point(hips, _player.kick_yaw))
-	return (_ground(ball.position) + _ground(ball.velocity) * t).distance_to(spot) <= reach
+	var spot := _ground(strike_point(_player.kick_hips_after(t), _player.kick_yaw))
+	var ball_then := _ground(ball.position + ball.velocity * t + 0.5 * ball.acceleration * t * t)
+	return ball_then.distance_to(spot) <= reach
 
 
-## Model-space centre of the ball where the kick's foot meets it.
-func _strike_offset() -> Vector3:
-	var feet := _player.kick_contact_feet()
+## On the run: whether the swing is due now, so that the foot meets the ball
+## at the kicking foot's next touch (this tick is the last before it would be late).
+func kick_touch_due() -> bool:
+	var per_tick := _player.phase_rate_at(_player.ground_velocity.length()) * get_physics_process_delta_time()
+	return _phase + _kick_touch_lead() + per_tick >= _next_touch_phase
+
+
+## Stride phase the legs cover from the swing's start to contact.
+func _kick_touch_lead() -> float:
+	return _player.phase_rate_at(_player.ground_velocity.length()) * _player.kick_contact_time / _player.kick_rate
+
+
+## On the run, the kick is the next touch of either foot at least a swing's
+## lead ahead; if that one goes by without a swing, the other foot's next.
+func _schedule_kick_touch() -> void:
+	var lead := _kick_touch_lead()
+	var per_tick := _player.phase_rate_at(_player.ground_velocity.length()) * get_physics_process_delta_time()
+	if not _kick_scheduled or _next_touch_phase < _phase + lead - per_tick:
+		# Whichever foot comes to the ball first.
+		_touch_after(lead + per_tick, -1)
+		_kick_scheduled = true
+	_player.set_kick_foot(_next_foot)
+
+
+## Model-space centre of the ball where a foot (the kick's, by default) meets it.
+func _strike_offset(foot := -1) -> Vector3:
+	var feet := _player.kick_contact_feet(foot)
 	var tip := feet[1] + (feet[1] - feet[0]).normalized() * toe_tip
 	return Vector3(tip.x, 0.0, tip.z + ball.radius)
 
 
-## Where the kicking foot meets the ball for a body at `at` facing `yaw` (world).
-func strike_point(at: Vector2, yaw: float) -> Vector3:
-	return _world(at, yaw, _strike_offset())
+## Where a foot (the kick's, by default) meets the ball for a body at `at`
+## facing `yaw` (world).
+func strike_point(at: Vector2, yaw: float, foot := -1) -> Vector3:
+	return _world(at, yaw, _strike_offset(foot))
+
+
+## The foot to kick with facing `yaw` from where the player stands: the one
+## whose meeting point is nearer the ball.
+func foot_for_kick(yaw: float) -> int:
+	var at := _ground(ball.position)
+	var left := _ground(strike_point(_hips(), yaw, Foot.LEFT)).distance_to(at)
+	var right := _ground(strike_point(_hips(), yaw, Foot.RIGHT)).distance_to(at)
+	return Foot.LEFT if left < right else Foot.RIGHT
 
 
 ## Turning far round on the spot (not fast enough for a turnback).
@@ -781,10 +842,19 @@ func _steer(delta: float) -> void:
 		_resting = false
 	else:
 		plant_point = Vector2.INF
+	if _player.kick_running and not _player.kick_swinging:
+		_schedule_kick_touch()
+	elif not _player.kick_running:
+		_kick_scheduled = false
 	if _player.kick_swinging:
 		# The kick's foot is coming for the ball: no touches, the ball is
 		# steered to meet it.
 		_bend_cap = maxf(_bend_cap, swing_bend)
+	elif _player.kick_running:
+		# Running into the kick: the kick is the next touch, though a foot
+		# running into the ball still touches it.
+		if contact.gap < 0.0 and _since_touch > CONTACT_COOLDOWN:
+			_touch("contact", contact)
 	elif _player.kick_ready() and _since_touch > CONTACT_COOLDOWN and contact.gap < set_touch_reach \
 			and not ball_meets_foot(_passing.set_reach):
 		# Planted and turned: a foot by the ball nudges it to where the kick meets it.

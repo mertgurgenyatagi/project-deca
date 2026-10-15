@@ -10,15 +10,15 @@ extends SceneTree
 ## [seconds, keys, sprint, pass button]
 const SEQUENCE := [
 	[0.5, Vector2.ZERO, false, false],
-	[1.0, Vector2(1, 0), false, false],
-	[0.15, Vector2(1, 0), false, true],
-	[0.4, Vector2(1, 0), false, false],
-	[4.2, Vector2.ZERO, false, false],
-	[0.4, Vector2(1, -0.2), false, true],
-	[0.4, Vector2(1, -0.2), false, false],
-	[2.6, Vector2.ZERO, false, false],
-	[0.1, Vector2(1, -0.5), false, true],
-	[0.3, Vector2(1, -0.5), false, false],
+	[1.2, Vector2(1, 0), false, false],
+	[0.1, Vector2(1, 0), false, true],
+	[0.6, Vector2(1, 0), false, false],
+	[4.4, Vector2.ZERO, false, false],
+	[1.0, Vector2(1, -0.2), false, false],
+	[0.33, Vector2(1, -0.2), false, true],
+	[0.6, Vector2(1, -0.2), false, false],
+	[2.4, Vector2.ZERO, false, false],
+	[0.08, Vector2(1, -0.5), false, true],
 	[4.0, Vector2.ZERO, false, false],
 ]
 
