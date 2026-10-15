@@ -12,7 +12,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if ball == null:
 		return
 	var distance := randf_range(3.0, 5.0)
-	var velocity := Vector3.FORWARD.rotated(Vector3.UP, randf() * TAU) * sqrt(2.0 * ball.roll_deceleration * distance)
+	var velocity := Vector3.FORWARD.rotated(Vector3.UP, randf() * TAU) * ball.speed_to_stop_at(distance)
 	if ball.holder:
 		ball.holder.get_node("Dribble").release(velocity)
 	else:
