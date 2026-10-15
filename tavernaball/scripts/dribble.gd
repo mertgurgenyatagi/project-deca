@@ -62,6 +62,12 @@ enum Foot { LEFT, RIGHT }
 ## The player's acceleration at full grip, as a share of normal: moving off
 ## with the ball is more careful than without it.
 @export var grip_acceleration := 0.6
+## At full grip the ball still counts as at the feet this far from the hips
+## (m), so a waiting change is made at once (`control_reach` with no grip).
+@export var grip_control_reach := 0.75
+## A touch that takes the ball round a corner costs the player this share of
+## their speed at a 180° change (proportionally less for smaller ones).
+@export var redirect_slowdown := 0.5
 
 @export_group("Control")
 ## Steering on the ball between touches (m/s²) before the cap starts growing.
@@ -566,6 +572,10 @@ func _update_resting() -> void:
 ## A touch: the ball's velocity changes outright, starting a new segment.
 func _touch(kind: String, contact := {}) -> void:
 	var error := _contact_error()
+	# Taking the ball round a corner costs pace (a turnback brakes anyway).
+	if _latched_input != Vector2.ZERO and _raw_input != Vector2.ZERO and not _player.would_turn_back(_raw_input):
+		var share := absf(_latched_input.angle_to(_raw_input)) / PI
+		_player.scale_speed(1.0 - redirect_slowdown * share)
 	# A foot is on the ball: the player may now act on the keys as they are.
 	_latch()
 	if kind == "regular":
@@ -622,7 +632,7 @@ func _steer(delta: float) -> void:
 		# A foot ran into the ball: that is a touch, and it pushes the ball away.
 		_touch("contact", contact)
 	elif _direction_pending() and _since_touch > CONTACT_COOLDOWN \
-			and (contact.gap < reach_for_ball or _ground(ball.position).distance_to(_hips()) <= control_reach):
+			and (contact.gap < reach_for_ball or _ground(ball.position).distance_to(_hips()) <= lerpf(control_reach, grip_control_reach, _grip())):
 		# The player reaches for the ball: make the waiting change with this touch.
 		_touch("control")
 	elif _clamped and contact.gap < touch_reach and _since_touch > TOUCH_COOLDOWN:

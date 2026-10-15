@@ -491,6 +491,13 @@ func turn_rate_at(speed: float) -> float:
 	return deg_to_rad(turn_speed)
 
 
+## Scales the player's ground speed (outside actions), e.g. when a touch
+## takes the ball round a corner.
+func scale_speed(factor: float) -> void:
+	if _action == Action.NONE:
+		_ground *= clampf(factor, 0.0, 1.0)
+
+
 ## Whether this input, applied now, would start a turnback.
 func would_turn_back(input: Vector2) -> bool:
 	return _action == Action.NONE and _should_turn_back(input)

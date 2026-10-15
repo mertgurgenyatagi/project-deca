@@ -59,7 +59,48 @@ func _scenarios() -> Array:
 		{"name": "pickup right", "pickup": Vector2(0, 3)},
 		{"name": "pickup behind", "pickup": Vector2(-3, 0)},
 		{"name": "random 60s", "random": 60.0},
+		{"name": "rapid taps", "taps": true},
 	]
+
+
+## Rapid arrow presses: a new direction (of 8) every 0.15-0.35 s for 12 s,
+## after a 2 s jog. Prints how long changes wait for a touch and how far the
+## ball sits from the hips; the end goal is the ball at the feet and near
+## instant changes.
+func _taps(offset: float) -> Dictionary:
+	await _start_holding()
+	var r := _new_result()
+	await _drive(r, 2.0, RIGHT, false, INF)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99 + int(offset * 100.0)
+	var t := 0.0
+	var waits := []
+	var dist_sum := 0.0
+	var dist_n := 0
+	var current := RIGHT
+	while t < 12.0:
+		var next := current
+		while next.is_equal_approx(current):
+			next = Vector2.from_angle(rng.randi_range(0, 7) * PI / 4.0).round().normalized()
+		current = next
+		var hold := rng.randf_range(0.15, 0.35)
+		player.move_input = current
+		var waited := -1.0
+		var h := 0.0
+		while h < hold:
+			await physics_frame
+			h += TICK
+			if waited < 0.0 and not dribble._direction_pending():
+				waited = h
+			var rel := Vector2(ball.position.x - player.global_position.x, ball.position.z - player.global_position.z)
+			dist_sum += rel.length()
+			dist_n += 1
+			r.far = maxf(r.far, rel.length())
+		waits.append(waited if waited >= 0.0 else hold)
+		t += hold
+	waits.sort()
+	print("   taps offset %.2f: change wait median %.2f s, 90%% %.2f s; ball from hips avg %.2f m, max %.2f m; speed now %.2f" % [offset, waits[waits.size() / 2], waits[int(waits.size() * 0.9)], dist_sum / dist_n, r.far, player.ground_velocity.length()])
+	return r
 
 
 ## Random inputs (8 directions or none, sprint on or off) held for 0.2-1.2 s
@@ -100,6 +141,8 @@ func _run() -> void:
 				r = await _pickup(s, offset)
 			elif s.has("random"):
 				r = await _random(s, offset)
+			elif s.has("taps"):
+				r = await _taps(offset)
 			else:
 				r = await _scenario(s, offset)
 			_merge(agg, r)

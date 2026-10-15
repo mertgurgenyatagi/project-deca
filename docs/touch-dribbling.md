@@ -74,6 +74,14 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   - soft touches: the ball arrives at `grip_arrival_ratio` (90%) of the player's speed, so it hardly runs ahead
   - slower moving off with the ball: acceleration is scaled down to `grip_acceleration` (60%). Movement without the ball is unchanged.
   - At full jog speed the rhythm is the usual every-second-step run-and-catch. Touching every step at full speed was tried and felt pinned.
+- **Rapid presses: emergent close control.** Nothing detects rapid input. Three rules chain together:
+  1. **Turning costs pace.** Steering slows the player for turns over 45°, and a touch that takes the ball round a corner costs `redirect_slowdown` × (angle ÷ 180°) of the player's speed. A 90° redirect keeps 75%.
+  2. **Slow means grip:** closer, softer, more frequent touches (above).
+  3. **Grip means control:** at full grip the ball counts as at the feet up to `grip_control_reach` (0.75 m) from the hips, against `control_reach` (0.5 m) with no grip, so a waiting change is made at once.
+
+  So rapid taps slow the player, which tightens the grip, which makes changes near instant. A straight run keeps the loose run-and-catch rhythm.
+  - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02–0.08 s, and 90% are made within 0.17–0.28 s. The ball averages 0.42–0.55 m from the hips, about where a touching toe meets it.
+  - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
 
 **Effect on the bench:**
