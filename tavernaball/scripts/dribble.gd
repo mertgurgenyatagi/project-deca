@@ -31,8 +31,8 @@ enum Foot { LEFT, RIGHT }
 @export_group("Touches")
 ## Foot for the first touch after taking the ball, and the side the ball rests on.
 @export var preferred_foot := Foot.RIGHT
-## Steps between touches at a jog (1 = every step, alternating feet).
-@export var jog_touch_steps := 1
+## Steps between touches at a jog (2 = one stride, the same foot each time).
+@export var jog_touch_steps := 2
 ## Steps between touches at a full sprint.
 @export var sprint_touch_steps := 4
 ## Input this far off the facing (degrees) halves the knock length.
@@ -42,7 +42,7 @@ enum Foot { LEFT, RIGHT }
 ## Toe tip length past the toe joint (m).
 @export var toe_tip := 0.06
 ## Ball sits this far to the outside of the touching foot (m).
-@export var touch_side_offset := 0.02
+@export var touch_side_offset := 0.04
 ## Ball's speed arriving at the next touch, as a share of the player's.
 @export var arrival_speed_ratio := 0.4
 ## A touch sends the ball at most this many times the player's speed...
@@ -82,10 +82,6 @@ enum Foot { LEFT, RIGHT }
 ## A held ball this close to the hips (m) counts as at the feet: a waiting
 ## change of direction can be made with a touch.
 @export var control_reach := 0.5
-## While a change waits, the player reaches for the ball: a toe this close to
-## its surface (m), or the ball this close to the hips (m), makes the touch.
-@export var reach_for_ball := 0.2
-@export var chase_reach := 0.75
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
 ## Below this predicted speed (m/s) at the next touch, the ball is brought to rest instead.
@@ -417,7 +413,7 @@ func _touch_steps() -> int:
 	if input != Vector2.ZERO:
 		var off := absf(angle_difference(_player.yaw, atan2(input.x, input.y)))
 		steps *= clampf(1.0 - 0.5 * rad_to_deg(off) / turn_shorten_angle, 0.5, 1.0)
-	return maxi(roundi(steps), 1)
+	return maxi(roundi(steps), 2)
 
 
 ## Where the ball should next arrive, when, and how fast.
@@ -589,18 +585,17 @@ func _steer(delta: float) -> void:
 		# A foot ran into the ball: that is a touch, and it pushes the ball away.
 		_touch("contact", contact)
 	elif _direction_pending() and _since_touch > CONTACT_COOLDOWN \
-			and (contact.gap < reach_for_ball or _ground(ball.position).distance_to(_hips()) <= chase_reach):
-		# The player reaches for the ball: make the waiting change with this touch.
+			and (contact.gap < touch_reach or _ground(ball.position).distance_to(_hips()) <= control_reach):
+		# The foot has reached the ball: make the waiting change with this touch.
 		_touch("control")
 	elif _clamped and contact.gap < touch_reach and _since_touch > TOUCH_COOLDOWN:
 		_touch("early")
 
 	var pending := _direction_pending()
 	if pending and not _was_pending and not _resting:
-		# A change is waiting: the player goes for the ball. The next touch
-		# moves to the very next foot swing, and the ball is touched as soon
-		# as a toe can reach for it.
-		_touch_after(0.25, -1)
+		# A change is waiting: bring the next touch forward to the next step,
+		# and let the ball be touched early as soon as a toe reaches it.
+		_touch_after(0.5, -1)
 		_clamped = true
 	_was_pending = pending
 

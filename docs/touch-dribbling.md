@@ -56,8 +56,7 @@ tools/anim_tests/
 While the player holds the ball, `player.gd` moves on the input the Dribble lets through (`gate_input`, `gate_sprint`), not on the raw keys.
 
 - **What waits:** a new direction, a stop or a sprint change takes effect only at a touch, when a foot is on the ball. Every kind of touch counts: rhythm, early, contact, pickup and "control". Until then, the player keeps the direction and sprint of their last touch.
-- **Making the wait short:** the player actively goes for the ball. When a direction change or a stop starts waiting, the next touch moves to the very next foot swing, and the ball is brought back to that foot. A toe within `reach_for_ball` (0.2 m) of the ball, or the ball within `chase_reach` (0.75 m) of the hips, makes the change at once with a "control" touch.
-- **Jog touches** come on every step, alternating feet (`jog_touch_steps` 1, `touch_side_offset` 0.02 m). The ball peaks about 0.66 m ahead of the hips (it was 0.83 m with touches every second step). Sprint knocks are unchanged.
+- **Making the wait short:** when a direction change or a stop starts waiting, the next touch is brought forward to the very next step, so the ball is brought back to that foot. A toe reaching the ball, or the ball coming within `control_reach` of the hips, makes the change at once with a "control" touch.
 - **From a standstill:** if the ball has come to rest out of reach, the player first steps up to it, then turns.
 - **The touch that makes the change is planned for it:**
   - **Turnback:** the ball is set down beside where the player will stop (§3.4).
@@ -114,12 +113,12 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
 | Ball | `radius` | 0.11 m |
 | Ball | `roll_deceleration` | 1.2 m/s² |
 | Dribble | `preferred_foot` | right |
-| Dribble | `jog_touch_steps` | 1 |
+| Dribble | `jog_touch_steps` | 2 |
 | Dribble | `sprint_touch_steps` | 4 |
 | Dribble | `turn_shorten_angle` | 60° |
 | Dribble | `touch_phase_offset` | 0.03 cycles |
 | Dribble | `toe_tip` | 0.06 m |
-| Dribble | `touch_side_offset` | 0.02 m |
+| Dribble | `touch_side_offset` | 0.04 m |
 | Dribble | `arrival_speed_ratio` | 0.4 |
 | Dribble | `touch_speed_ratio` | 2.0 |
 | Dribble | `touch_speed_margin` | 1.5 m/s |
