@@ -82,6 +82,10 @@ enum Foot { LEFT, RIGHT }
 ## A held ball this close to the hips (m) counts as at the feet: a waiting
 ## change of direction can be made with a touch.
 @export var control_reach := 0.5
+## While a change waits, a toe this close to the ball's surface (m) reaches
+## for it and makes the touch. Kept small: too large and the ball answers the
+## keys at once, as if attached.
+@export var reach_for_ball := 0.14
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
 ## Below this predicted speed (m/s) at the next touch, the ball is brought to rest instead.
@@ -585,17 +589,18 @@ func _steer(delta: float) -> void:
 		# A foot ran into the ball: that is a touch, and it pushes the ball away.
 		_touch("contact", contact)
 	elif _direction_pending() and _since_touch > CONTACT_COOLDOWN \
-			and (contact.gap < touch_reach or _ground(ball.position).distance_to(_hips()) <= control_reach):
-		# The foot has reached the ball: make the waiting change with this touch.
+			and (contact.gap < reach_for_ball or _ground(ball.position).distance_to(_hips()) <= control_reach):
+		# The player reaches for the ball: make the waiting change with this touch.
 		_touch("control")
 	elif _clamped and contact.gap < touch_reach and _since_touch > TOUCH_COOLDOWN:
 		_touch("early")
 
 	var pending := _direction_pending()
 	if pending and not _was_pending and not _resting:
-		# A change is waiting: bring the next touch forward to the next step,
-		# and let the ball be touched early as soon as a toe reaches it.
-		_touch_after(0.5, -1)
+		# A change is waiting: the player goes for the ball. The next touch
+		# moves to the very next foot swing, and a toe reaching for the ball
+		# can make it sooner still.
+		_touch_after(0.25, -1)
 		_clamped = true
 	_was_pending = pending
 

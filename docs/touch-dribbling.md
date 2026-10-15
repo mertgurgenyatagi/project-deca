@@ -56,7 +56,8 @@ tools/anim_tests/
 While the player holds the ball, `player.gd` moves on the input the Dribble lets through (`gate_input`, `gate_sprint`), not on the raw keys.
 
 - **What waits:** a new direction, a stop or a sprint change takes effect only at a touch, when a foot is on the ball. Every kind of touch counts: rhythm, early, contact, pickup and "control". Until then, the player keeps the direction and sprint of their last touch.
-- **Making the wait short:** when a direction change or a stop starts waiting, the next touch is brought forward to the very next step, so the ball is brought back to that foot. A toe reaching the ball, or the ball coming within `control_reach` of the hips, makes the change at once with a "control" touch.
+- **Making the wait short:** the player goes for the ball. When a direction change or a stop starts waiting, the next touch moves to the very next foot swing, so the ball is brought back to that foot. A toe within `reach_for_ball` (0.14 m) of the ball, or the ball within `control_reach` (0.5 m) of the hips, makes the change at once with a "control" touch.
+  - **Keep both reaches smaller than where the ball usually is** (about 0.55–0.85 m ahead of the hips at a jog). A 0.75 m hip reach together with touches on every step made the ball answer the keys instantly, as if attached, and was rolled back.
 - **From a standstill:** if the ball has come to rest out of reach, the player first steps up to it, then turns.
 - **The touch that makes the change is planned for it:**
   - **Turnback:** the ball is set down beside where the player will stop (§3.4).
