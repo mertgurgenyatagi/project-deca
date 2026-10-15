@@ -44,13 +44,13 @@ enum Foot { LEFT, RIGHT }
 ## Ball sits this far to the outside of the touching foot (m).
 @export var touch_side_offset := 0.04
 ## Ball's speed arriving at the next touch, as a share of the player's.
-@export var arrival_speed_ratio := 0.55
+@export var arrival_speed_ratio := 0.7
 ## The same at a full sprint (lower = longer knocks).
 @export var sprint_arrival_ratio := 0.4
 ## A touch sends the ball at most this many times the player's speed...
 @export var touch_speed_ratio := 2.0
 ## ...plus this (m/s), so touches from a standstill can still move it.
-@export var touch_speed_margin := 1.5
+@export var touch_speed_margin := 1.0
 
 @export_group("Grip")
 ## At the start of a movement the player keeps the ball at their feet: grip

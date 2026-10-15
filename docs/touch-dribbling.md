@@ -80,7 +80,7 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   3. **Grip means control:** at full grip the ball counts as at the feet up to `grip_control_reach` (0.75 m) from the hips, against `control_reach` (0.5 m) with no grip, so a waiting change is made at once.
 
   So rapid taps slow the player, which tightens the grip, which makes changes near instant. A straight run keeps the loose run-and-catch rhythm.
-  - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.75 m (`arrival_speed_ratio` 0.55); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
+  - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.68 m (`arrival_speed_ratio` 0.7), and moving off to 0.74 m (`touch_speed_margin` 1.0 m/s); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
   - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
 
@@ -133,10 +133,10 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
 | Dribble | `touch_phase_offset` | 0.03 cycles |
 | Dribble | `toe_tip` | 0.06 m |
 | Dribble | `touch_side_offset` | 0.04 m |
-| Dribble | `arrival_speed_ratio` | 0.55 (jog) |
+| Dribble | `arrival_speed_ratio` | 0.7 (jog) |
 | Dribble | `sprint_arrival_ratio` | 0.4 |
 | Dribble | `touch_speed_ratio` | 2.0 |
-| Dribble | `touch_speed_margin` | 1.5 m/s |
+| Dribble | `touch_speed_margin` | 1.0 m/s |
 | Dribble | `max_bend` | 3 m/s² |
 | Dribble | `bend_growth` | 20 m/s² per second |
 | Dribble | `free_braking` | 8 m/s² |
