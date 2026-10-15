@@ -11,6 +11,10 @@ extends Node
 ## cap. The cap grows while the ball is off its plan, so the ball always comes
 ## back: possession is never lost without a defender.
 ##
+## The player only changes what they do when a foot is on the ball: a new
+## direction, a stop or a sprint change waits for a touch (see gate_input).
+## While a change waits, the next touch is brought forward to the next step.
+##
 ## Beyond that rhythm:
 ## - A foot that runs into the ball touches it, pushing it away from the foot.
 ## - Off its plan, the ball is touched early by the first toe that comes near.
@@ -70,11 +74,14 @@ enum Foot { LEFT, RIGHT }
 ## touching foot; the ball keeps bending toward the next one instead.
 @export var miss_distance := 0.3
 ## Preferred distance in front of the hips for the ball to come to rest (m).
-@export var rest_distance := 0.35
+@export var rest_distance := 0.5
 ## The ball is braked so it comes to rest no further than this in front (m).
 @export var rest_max_distance := 1.0
 ## A loose ball within this distance of the player (m) is taken.
 @export var pickup_reach := 0.6
+## A held ball this close to the hips (m) counts as at the feet: a waiting
+## change of direction can be made with a touch.
+@export var control_reach := 0.5
 
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
@@ -121,6 +128,13 @@ var _toe_bones := [-1, -1]
 var _ankle_bones := [-1, -1]
 var _last_toes := [Vector3.INF, Vector3.INF]
 var _clock := 0.0
+## The keys as pressed, and the direction and sprint the player is allowed to
+## act on: with the ball, these only change at a touch.
+var _raw_input := Vector2.ZERO
+var _raw_sprint := false
+var _latched_input := Vector2.ZERO
+var _latched_sprint := false
+var _was_pending := false
 
 @onready var _player: Player = get_parent()
 
@@ -149,6 +163,50 @@ func _physics_process(delta: float) -> void:
 	if ball.holder != _player:
 		return
 	_steer(delta)
+
+
+func holding() -> bool:
+	return ball != null and ball.holder == _player
+
+
+## The movement input the player may act on this tick. With the ball, a new
+## direction (or stopping) waits until a foot is on the ball: the player keeps
+## going the way they last touched it, and the next touch is brought forward
+## to the very next step. Standing with the ball out of reach, the player
+## first steps up to it.
+func gate_input(raw: Vector2) -> Vector2:
+	_raw_input = raw
+	if not holding():
+		_latched_input = raw
+		return raw
+	if _direction_pending() and _latched_input == Vector2.ZERO and _player.action == Player.Action.NONE:
+		var to_ball := _ground(ball.position) - _hips()
+		return Vector2.ZERO if to_ball.length() <= control_reach else to_ball.normalized()
+	return _latched_input
+
+
+## Sprint the player may act on: with the ball, it changes only at a touch.
+func gate_sprint(raw: bool) -> bool:
+	_raw_sprint = raw
+	if not holding():
+		_latched_sprint = raw
+		return raw
+	return _latched_sprint
+
+
+## Whether a new direction, or a stop or start, is waiting for a touch.
+func _direction_pending() -> bool:
+	if (_raw_input == Vector2.ZERO) != (_latched_input == Vector2.ZERO):
+		return true
+	if _raw_input == Vector2.ZERO:
+		return false
+	return absf(_raw_input.angle_to(_latched_input)) > deg_to_rad(5.0)
+
+
+## Lets the player act on the keys as they are now.
+func _latch() -> void:
+	_latched_input = _raw_input
+	_latched_sprint = _raw_sprint
 
 
 ## The pickup rule: a loose ball close enough, unless this player just let it
@@ -244,7 +302,9 @@ func _sim_start() -> Sim:
 
 func _sim_step(s: Sim, dt: float) -> void:
 	var p := _player
-	var input := p.move_input
+	var input := _latched_input
+	var top := p.sprint_speed if _latched_sprint else p.move_speed
+	var accel := p.sprint_acceleration if _latched_sprint else p.acceleration
 	var speed := s.speed
 	match s.action:
 		Player.Action.BRAKE:
@@ -253,7 +313,7 @@ func _sim_step(s: Sim, dt: float) -> void:
 			if speed == 0.0:
 				s.action = Player.Action.PUSH_OFF
 		Player.Action.PUSH_OFF:
-			speed = move_toward(speed, p.top_speed(), p.current_acceleration() * dt)
+			speed = move_toward(speed, top, accel * dt)
 			s.velocity = p.action_dir * speed
 			s.yaw = atan2(p.action_dir.x, p.action_dir.y)
 		_:
@@ -266,8 +326,8 @@ func _sim_step(s: Sim, dt: float) -> void:
 				s.yaw = wrapf(s.yaw + clampf(step, -max_step, max_step), -PI, PI)
 				var target_speed := 0.0
 				if absf(angle_difference(s.yaw, target_yaw)) < deg_to_rad(p.go_angle):
-					target_speed = p.top_speed() * input.length()
-				var rate := p.current_acceleration()
+					target_speed = top * input.length()
+				var rate := accel
 				if target_speed < speed:
 					rate = p.sprint_slowdown if target_speed > 0.0 else p.deceleration
 				speed = move_toward(speed, target_speed, rate * dt)
@@ -324,7 +384,7 @@ func _touch_after(min_ahead: float, foot: int) -> void:
 ## shortened while the input points away from the facing.
 func _touch_steps() -> int:
 	var steps := lerpf(jog_touch_steps, sprint_touch_steps, _player.sprint_weight)
-	var input := _player.move_input
+	var input := _latched_input
 	if input != Vector2.ZERO:
 		var off := absf(angle_difference(_player.yaw, atan2(input.x, input.y)))
 		steps *= clampf(1.0 - 0.5 * rad_to_deg(off) / turn_shorten_angle, 0.5, 1.0)
@@ -334,8 +394,10 @@ func _touch_steps() -> int:
 ## Where the ball should next arrive, when, and how fast.
 ## Returns [target, time_left, arrival_velocity] in world space.
 func _target() -> Array:
-	if _player.action == Player.Action.BRAKE:
+	if _player.action == Player.Action.BRAKE or _player.would_turn_back(_latched_input):
 		return _turnback_target()
+	if _pivoting():
+		return _pivot_target()
 	if not _resting:
 		var s := _predict_to_phase(_next_touch_phase)
 		if s.time < PREDICT_HORIZON and s.speed >= REST_SPEED:
@@ -351,17 +413,50 @@ func _target() -> Array:
 ## stops, so the push-off can take it away from that side rather than drag
 ## it back through the legs.
 func _turnback_target() -> Array:
+	var starting := _player.action != Player.Action.BRAKE
 	var s := _sim_start()
+	# A turnback about to start (the touch that allows it) brakes from now.
+	s.action = Player.Action.BRAKE
 	while s.action == Player.Action.BRAKE and s.time < PREDICT_HORIZON:
 		_sim_step(s, PREDICT_STEP)
 	var old_dir := _player.ground_velocity.normalized()
 	if old_dir == Vector2.ZERO:
 		old_dir = Vector2(sin(_player.yaw), cos(_player.yaw))
 	# The body turns toward `turn` (+1 left, -1 right of the old direction).
-	var turn := signf(_player.turn_direction)
+	var turn := signf(_player.turn_for(_latched_input) if starting else _player.turn_direction)
 	var left := Vector2(old_dir.y, -old_dir.x)
 	var at := s.position + old_dir * turnback_ball_ahead + left * turn * turnback_ball_side
 	return [Vector3(at.x, ball.radius, at.y), maxf(s.time, PREDICT_STEP), Vector3.ZERO]
+
+
+## Turning far round on the spot (not fast enough for a turnback).
+func _pivoting() -> bool:
+	if _latched_input == Vector2.ZERO or _player.action != Player.Action.NONE:
+		return false
+	if _player.ground_velocity.length() > _player.turnback_min_speed:
+		return false
+	return absf(angle_difference(_player.yaw, atan2(_latched_input.x, _latched_input.y))) > deg_to_rad(100.0)
+
+
+## A pivot on the spot takes the ball round to the side the body turns
+## toward, rather than through the feet.
+func _pivot_target() -> Array:
+	var facing := Vector2(sin(_player.yaw), cos(_player.yaw))
+	var turn := _player.turn_for(_latched_input)
+	var left := Vector2(facing.y, -facing.x)
+	var new_dir := _latched_input.normalized()
+	var at := _hips() + left * signf(turn) * turnback_ball_side + new_dir * 0.15
+	var time := absf(turn) / _player.turn_rate_at(0.0) + 0.1
+	return [Vector3(at.x, ball.radius, at.y), time, Vector3.ZERO]
+
+
+## Where the ball should come to rest when the player stops: `rest_distance`
+## in front of where the player is predicted to stop. Used to aim the touch
+## that stops it; afterwards it only brakes.
+func _rest_point() -> Array:
+	var stop := _predict_stop()
+	var at := _world(stop.position, stop.yaw, Vector3(0.0, 0.0, rest_distance))
+	return [at, stop.time + 0.25, Vector3.ZERO]
 
 
 ## Bringing the ball to rest: it only ever slows down along its own path, never
@@ -396,7 +491,7 @@ func _rest_target() -> Array:
 func _update_resting() -> void:
 	if not _resting:
 		return
-	var input := _player.move_input
+	var input := _latched_input
 	if input == Vector2.ZERO:
 		return
 	_touch_after(0.3, -1)
@@ -409,12 +504,17 @@ func _update_resting() -> void:
 ## A touch: the ball's velocity changes outright, starting a new segment.
 func _touch(kind: String, contact := {}) -> void:
 	var error := _contact_error()
+	# A foot is on the ball: the player may now act on the keys as they are.
+	_latch()
 	if kind == "regular":
 		_touch_after(_touch_steps() * 0.5 - 0.25, _next_foot if _touch_steps() % 2 == 0 else 1 - _next_foot)
 	else:
 		_resting = false
 		_touch_after(jog_touch_steps * 0.5 - 0.25, -1)
 	var plan := _target()
+	if _resting:
+		# The stopping touch rolls the ball to just in front of where the player stops.
+		plan = _rest_point()
 	var target: Vector3 = plan[0]
 	var time: float = maxf(plan[1], PREDICT_STEP)
 	var arrival: Vector3 = plan[2]
@@ -459,8 +559,20 @@ func _steer(delta: float) -> void:
 	elif contact.gap < 0.0 and _since_touch > CONTACT_COOLDOWN:
 		# A foot ran into the ball: that is a touch, and it pushes the ball away.
 		_touch("contact", contact)
+	elif _direction_pending() and _since_touch > CONTACT_COOLDOWN \
+			and (contact.gap < touch_reach or _ground(ball.position).distance_to(_hips()) <= control_reach):
+		# The foot has reached the ball: make the waiting change with this touch.
+		_touch("control")
 	elif _clamped and contact.gap < touch_reach and _since_touch > TOUCH_COOLDOWN:
 		_touch("early")
+
+	var pending := _direction_pending()
+	if pending and not _was_pending and not _resting:
+		# A change is waiting: bring the next touch forward to the next step,
+		# and let the ball be touched early as soon as a toe reaches it.
+		_touch_after(0.5, -1)
+		_clamped = true
+	_was_pending = pending
 
 	var plan := _target()
 	var target: Vector3 = plan[0]

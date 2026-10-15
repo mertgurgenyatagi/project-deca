@@ -14,6 +14,9 @@ extends CharacterBody3D
 ##   once it nearly faces the new direction.
 ## Otherwise the body curves toward the input and travels the way it faces.
 ##
+## With the ball, the Dribble child gates the input: a change of direction,
+## a stop or a sprint change takes effect only when a foot is on the ball.
+##
 ## Animation:
 ## - Gait: idle blends into a jog/sprint gait by ground speed. The jog and
 ##   sprint loops share one stride phase (aligned on the left foot's forward
@@ -235,6 +238,7 @@ var _turn_motion := 0.0
 @onready var _model: Node3D = $Model
 @onready var _skeleton: Skeleton3D = $Model/Character/Skeleton3D
 @onready var _anim_tree: AnimationTree = $AnimationTree
+@onready var _dribble: Dribble = get_node_or_null(^"Dribble")
 
 
 func _ready() -> void:
@@ -289,6 +293,10 @@ func _physics_process(delta: float) -> void:
 		sprint_held = Input.is_action_pressed(&"sprint")
 	var input := move_input
 	_sprinting = sprint_held
+	if _dribble:
+		# With the ball, changes of direction or pace wait for a touch.
+		input = _dribble.gate_input(move_input)
+		_sprinting = _dribble.gate_sprint(sprint_held)
 	var previous_yaw := _yaw
 
 	# An action carries on only while its direction is held.
@@ -481,6 +489,23 @@ func turn_rate_at(speed: float) -> float:
 	if speed > move_speed:
 		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
 	return deg_to_rad(turn_speed)
+
+
+## Whether this input, applied now, would start a turnback.
+func would_turn_back(input: Vector2) -> bool:
+	return _action == Action.NONE and _should_turn_back(input)
+
+
+## Signed turn (+ left, − right) the body would make toward this input: as a
+## turnback would make it, or else as steering would.
+func turn_for(input: Vector2) -> float:
+	var target := atan2(input.x, input.y)
+	if would_turn_back(input):
+		var turn := angle_difference(_yaw, target)
+		if absf(turn) > deg_to_rad(179.0):
+			turn = absf(turn) * _walk_turn.turn_sign
+		return turn
+	return _turn_toward(_yaw, target)
 
 
 func top_speed() -> float:

@@ -52,6 +52,23 @@ tools/anim_tests/
 
 ## 3. Dribbling (`dribble.gd`)
 
+### 3.0 Changes wait for the ball
+While the player holds the ball, `player.gd` moves on the input the Dribble lets through (`gate_input`, `gate_sprint`), not on the raw keys.
+
+- **What waits:** a new direction, a stop or a sprint change takes effect only at a touch, when a foot is on the ball. Every kind of touch counts: rhythm, early, contact, pickup and "control". Until then, the player keeps the direction and sprint of their last touch.
+- **Making the wait short:** when a direction change or a stop starts waiting, the next touch is brought forward to the very next step, so the ball is brought back to that foot. A toe reaching the ball, or the ball coming within `control_reach` of the hips, makes the change at once with a "control" touch.
+- **From a standstill:** if the ball has come to rest out of reach, the player first steps up to it, then turns.
+- **The touch that makes the change is planned for it:**
+  - **Turnback:** the ball is set down beside where the player will stop (§3.4).
+  - **Standing pivot past 100°:** the ball is taken round to the side the body turns toward, not through the feet.
+  - **Stop:** the ball is rolled to `rest_distance` in front of where the player will stop.
+- **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
+
+**Effect on the bench:**
+- The average bend on 90° turns fell from 2.6 (jog) and 6.8 (sprint) to about 0.3 m/s².
+- In the random stress test, the furthest ball distance fell from 2.6 to 1.7 m, the average bend from 5.0 to 1.5 m/s², and the worst touch miss from 24 to 9.5 cm.
+- Some §5 rows below were measured before this change. Re-run the bench for current numbers.
+
 ### 3.1 Touches on the stride
 - **Touch moment:** each foot touches at the stride phase where its toe reaches furthest forward, minus `touch_phase_offset`. This is found in the jog and sprint loops by forward kinematics and blended by the sprint weight.
   - At a jog the toe is about 0.33 m ahead of the hips, a few cm off the ground and moving at about body speed. At a sprint it's about 0.53 m ahead.
@@ -107,9 +124,10 @@ tools/anim_tests/
 | Dribble | `turnback_ball_side` | 0.25 m |
 | Dribble | `touch_reach` | 0.08 m |
 | Dribble | `miss_distance` | 0.3 m |
-| Dribble | `rest_distance` | 0.35 m |
+| Dribble | `rest_distance` | 0.5 m |
 | Dribble | `rest_max_distance` | 1.0 m |
 | Dribble | `pickup_reach` | 0.6 m |
+| Dribble | `control_reach` | 0.5 m |
 
 ## 4. `player.gd` additions
 - **Input seam:** `move_input`, `sprint_held` and `read_input`.
@@ -153,8 +171,8 @@ Each scenario runs from 3 start offsets.
 - **The random stress test** changes direction (8 ways or none) and sprint every 0.2–1.2 s from a fixed seed. It's deterministic and much harsher than normal play. Its bend shows the cost of approach A: under constant direction changes, the ball has to cheat often.
 
 ## 6. Known limits and next steps
-1. **Sharp turns at speed bend the ball visibly.** A 90° sprint turn averages 6.8 m/s² of bend. Shorter knocks while turning help, but a ball knocked 1.7 m ahead still has to curve. A dedicated turn-with-ball animation, or slowing the player slightly while turning with the ball, would reduce this. The second option would change movement, which approach A deliberately avoids.
-2. **Standing pivots and sharp jog turns still clip the ball briefly** (up to about 10 cm, a few frames). The ball sits in the sweep of the pivoting feet.
+1. **Responsiveness:** with the ball, a change waits for the next step's touch. That's up to about 0.35 s at a jog and 0.7 s at a sprint. This is deliberate (§3.0).
+2. **Standing pivots still clip the ball briefly** (up to about 13 cm, a few frames). The ball sits in the sweep of the pivoting feet.
 3. **No dribble-specific animation.** Touches use the jog and sprint legs at the moment the swinging foot meets the ball. A Mixamo dribble clip, or soccer clips such as "stall soccerball" for traps, could replace the leg motion around touches without changing the ball logic.
 4. **Stopping is a braked roll,** not a sole trap. The ball comes to rest up to about 1.2 m ahead.
 5. **The `godot-mcp` live check wasn't possible** because the editor plugin disconnected during this session. `debug_key_test.gd` covers the real input path headlessly instead. Note that headless runs need `root.push_input` for key events; `Input.parse_input_event` doesn't reach `_unhandled_input` there.
