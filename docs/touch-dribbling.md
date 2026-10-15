@@ -44,6 +44,7 @@ tools/anim_tests/
 - **Not a physics body.** It moves itself in `_physics_process`, at `process_physics_priority` 10, so after the players. It's drawn with physics interpolation and stays on the ground, with its centre at y = 0.11.
 - **Loose:**
   - Position is `p0 + û0·(|u0|·t − ½·a·t²)`, held at the stop point once it stops. The deceleration `a` is `roll_deceleration` (1.2 m/s²).
+  - *Since branch `passing`:* a quadratic drag (`roll_drag`) is added, still in closed form, and a release can hop. See [passing.md](passing.md) §5.
   - `release(at, velocity, by)` starts a roll.
   - `place(at)` teleports the ball and leaves it at rest.
 - **Held:** the holder's Dribble sets `acceleration` every tick. `touch(velocity)` changes the velocity outright, and it's only used at a touch.

@@ -1,6 +1,6 @@
 # Notes
 
-What isn't in [docs/initial-movement.md](docs/initial-movement.md) (movement and animation) or [docs/touch-dribbling.md](docs/touch-dribbling.md) (ball and dribbling). Read those two first.
+What isn't in [docs/initial-movement.md](docs/initial-movement.md) (movement and animation), [docs/touch-dribbling.md](docs/touch-dribbling.md) (ball and dribbling) or [docs/passing.md](docs/passing.md) (passing). Read those three first.
 
 ## Direction and preferences
 
@@ -24,7 +24,10 @@ What isn't in [docs/initial-movement.md](docs/initial-movement.md) (movement and
 - **A headless test script that errors before `quit()` hangs.** Run tests under `timeout`, and guard missing resources with an early `quit()`.
 - **Headless key events:** use `root.push_input(event)`. `Input.parse_input_event` doesn't reach `_unhandled_input` there.
 - **`dribble_bench.gd` runs its scenarios one after another in one scene,** so results can depend on order. That's how a slipping stride counter was found. Use `-- only=<name>` to isolate a scenario.
-- **To trace a bench problem,** copy the bench to a scratch folder and insert prints at the first frame a metric crosses a limit, for example the ball's distance from the player.
+- **To trace a bench problem,** copy the bench to a scratch folder and insert prints at the first frame a metric crosses a limit, for example the ball's distance from the player. `pass_bench.gd` has this built in: `-- only=<name> trace`.
+- **`main.tscn` has two stand-in teammates under `Teammates`.** Every test that loads it frees that node first, except `pass_bench.gd` and `record_pass.gd`. A new test should too, or the stand-ins will take the ball and block the player.
+- **Setting `global_position` in a test's `_initialize` errors** (`!is_inside_tree()`): the tree isn't running yet. Set `position` there, or wait a frame.
+- **The kick clips in `soccer_animations/`:** "kick soccerball (2)" is the light right-footed kick used for passes (toe at 4.8 m/s at contact); "kick soccerball" is a harder left-footed one (6.2 m/s); "strike foward jog" is a running shot. All come from a rig whose feet stand about 4 cm lower than the idle's.
 
 ## Caveats about the docs
 
@@ -48,4 +51,5 @@ These aren't covered in the docs.
 - **Skating on quick pivots.** Planted-foot slip is still about 1.0–1.3 m/s under rapid presses, against about 0.2 m/s at a steady jog. Pivots are built from jog legs. The real fix is cut or turn clips (Mixamo), or foot-locking IK (check `ClassDB` for TwoBoneIK3D-style modifiers in 4.7.2).
 - **`IntentLean` (body hint while a change waits) has never been checked visually.** The bone-axis signs are unverified; if the shoulders turn away from the new direction, flip the twist sign.
 - **Foot–ball overlap is about 4–5% of frames in random play,** mostly in turnbacks and pivots. That's the price of keeping the ball tight.
-- **Next features:** passing and shooting (`Dribble.release` and `Ball.release` exist), other players, tackles and steals, then networking.
+- **Passing feel is untested by the owner.** The first things to tune are in passing.md §7: how long a pass takes to go, and whether a pass off a sprint feels too slow.
+- **Next features:** shooting (the kick path in `passing.gd` and `Ball.release` with hop are the base), other players, tackles and steals, then networking.
