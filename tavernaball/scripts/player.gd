@@ -58,6 +58,11 @@ enum Action { NONE, BRAKE, PUSH_OFF, START }
 @export var sprint_slowdown := 7.2
 ## Turn rate at full sprint (degrees/s), for turns short of a turnback. Not measured in PES.
 @export var sprint_turn_speed := 330.0
+## At sprint pace the heading turns in notches of this many degrees, PES
+## style (0 = smooth turning).
+@export var sprint_notch := 22.5
+## Shortest time on each notch before the next (s).
+@export var sprint_notch_hold := 0.08
 ## Play the sprint-start clip when sprinting off from a standstill. Off, the
 ## gait blends straight in, which slides the feet slightly less but has no
 ## sprint-start posture.
@@ -269,6 +274,8 @@ var _turn_motion := 0.0
 var _stride := 1.0
 ## The input acted on last tick, to notice changes of direction.
 var _last_input := Vector2.ZERO
+## Sprint notch steering: [active, notch heading, hold timer].
+var _notch := [false, 0.0, -1.0]
 
 ## Current stride share (1 = the clips' own stride).
 var stride: float:
@@ -533,13 +540,51 @@ func _play_until_exit(clip: OneShot, speed: float) -> void:
 		_sync_gait()
 
 
+## PES-style sprint steering: at sprint pace the heading moves in notches of
+## `sprint_notch` degrees (world-aligned), one notch at a time, each held at
+## least `sprint_notch_hold` seconds, instead of curving smoothly. Returns the
+## heading to steer for this tick.
+func _sprint_heading(wanted: float, speed: float, delta: float) -> float:
+	return notch_heading(_notch, _yaw, wanted, speed, _sprinting, delta)
+
+
+## One tick of notch steering on `state` ([notching, notch yaw, hold timer],
+## updated in place), for a body at `yaw` wanting `wanted`. Shared with the
+## Dribble's prediction so both step through the same notches.
+func notch_heading(state: Array, yaw: float, wanted: float, speed: float, sprinting: bool, delta: float) -> float:
+	if not sprinting or speed < move_speed or sprint_notch <= 0.0:
+		state[0] = false
+		return wanted
+	var notch := deg_to_rad(sprint_notch)
+	if not state[0]:
+		state[0] = true
+		state[1] = roundf(yaw / notch) * notch
+		state[2] = -1.0
+	# The hold starts once the body has arrived on its notch (-1: not yet).
+	if state[2] < 0.0 and absf(angle_difference(yaw, state[1])) < notch * 0.25:
+		state[2] = sprint_notch_hold
+	if state[2] >= 0.0:
+		state[2] = maxf(state[2] - delta, 0.0)
+	var goal := roundf(wanted / notch) * notch
+	var left := _turn_toward(state[1], goal)
+	if absf(left) > notch * 0.5 and state[2] == 0.0:
+		state[1] = wrapf(state[1] + signf(left) * notch, -PI, PI)
+		state[2] = -1.0
+	return state[1]
+
+
+## A copy of the current notch steering state (for prediction).
+func notch_state() -> Array:
+	return _notch.duplicate()
+
+
 func _step_steering(input: Vector2, delta: float) -> void:
 	if input == Vector2.ZERO:
 		_ground = _ground.move_toward(Vector2.ZERO, deceleration * delta)
 		return
 
 	var speed := _ground.length()
-	var target_yaw := atan2(input.x, input.y)
+	var target_yaw := _sprint_heading(atan2(input.x, input.y), speed, delta)
 	var max_step := turn_rate_at(speed) * delta
 	# Agile turns snap round rather than glide.
 	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-turn_sharpness_at(speed) * delta))

@@ -335,6 +335,7 @@ class Sim:
 	var phase: float
 	var time := 0.0
 	var action: int
+	var notch: Array
 	var speed: float:
 		get: return velocity.length()
 
@@ -346,6 +347,7 @@ func _sim_start() -> Sim:
 	s.yaw = _player.yaw
 	s.phase = _phase
 	s.action = _player.action
+	s.notch = _player.notch_state()
 	return s
 
 
@@ -370,7 +372,7 @@ func _sim_step(s: Sim, dt: float) -> void:
 			if input == Vector2.ZERO:
 				speed = move_toward(speed, 0.0, p.deceleration * dt)
 			else:
-				var target_yaw := atan2(input.x, input.y)
+				var target_yaw := p.notch_heading(s.notch, s.yaw, atan2(input.x, input.y), speed, _latched_sprint, dt)
 				var max_step := p.turn_rate_at(speed) * dt
 				var sharp := p.turn_sharpness_at(speed)
 				var step := angle_difference(s.yaw, target_yaw) * (1.0 - exp(-sharp * dt))

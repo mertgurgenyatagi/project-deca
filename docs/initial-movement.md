@@ -151,6 +151,8 @@ At low speed the player is agile, with or without the ball. These rules were dev
   - `redirect_slowdown` (0.5): changing direction costs that share of speed at 180°, proportionally less for smaller changes. Turnbacks brake instead.
   - `jog_stride` (0.75): jog strides are 75% of the clips' own length at the same speed, for quicker, shorter steps. The swing is shrunk by mixing the idle pose into the gait (the Locomotion blend), and the stride-matched crossfades allow for it. The sprint keeps its stride.
 
+**PES-style sprint steering.** At sprint pace (sprint held, speed at least jog speed), the heading moves in world-aligned notches of `sprint_notch` (22.5°, so 16 directions), one notch at a time. Each notch is held `sprint_notch_hold` (0.08 s) after the body arrives on it, so a 90° sprint turn is four quick steps (about 0.6 s) rather than an arc. Jogging turns smoothly, and turnbacks are unchanged. The Dribble's prediction runs the same notch logic (`notch_heading`), so touches stay on the foot (90° sprint turn with the ball: 2.7 cm).
+
 **PES check after the refit** (game frames ×1.2 against the targets):
 
 | Test | Now | Target |
