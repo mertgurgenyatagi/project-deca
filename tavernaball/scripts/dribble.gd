@@ -11,6 +11,13 @@ extends Node
 ## cap. The cap grows while the ball is off its plan, so the ball always comes
 ## back: possession is never lost without a defender.
 ##
+## Beyond that rhythm:
+## - A foot that runs into the ball touches it, pushing it away from the foot.
+## - Off its plan, the ball is touched early by the first toe that comes near.
+## - Stopping and turnbacks only ever slow the ball along its path, never pull
+##   it back toward the player: it rests in front, or for a turnback, beside
+##   where the player stops, on the side the body turns.
+##
 ## Everything here reads the player's state (position, velocity, facing,
 ## stride, input), never the keyboard. A copy of a player driven by the
 ## network would dribble with the same code.

@@ -240,7 +240,7 @@ Pops stay at about 0.03–0.10, close to what the steady loops produce.
 3. **Exact reversals always turn right.** A mirrored "Walking Turn 180" (Mixamo's Mirror checkbox), wired as a second `OneShot` and chosen by direction, would allow left turns.
 4. **The turn clip is a walking turn,** so jog and sprint turnbacks have a walking posture. A jogging or running 180° turn clip *with a push-off* would look better.
 5. **Several constants are guesses** (§3.2). Useful PES timings to collect: a stop, a standing 180°, a sprint turnback and a sprint release.
-6. **No goals, ball or other players yet.**
+6. **No goals or other players yet.** The ball and touch dribbling came next, on branch `ball-interaction`. See [touch-dribbling.md](touch-dribbling.md).
 
 ---
 

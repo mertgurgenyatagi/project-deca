@@ -2,6 +2,8 @@
 
 Branch `ball-interaction`, 2026-10-15.
 
+> **Implemented.** Bench and visual testing added several rules that this spec doesn't cover: foot-contact touches, missed touches, free braking, braking-only stops, turnback rest beside the player, and touch speed caps. Some defaults also changed. [docs/touch-dribbling.md](../../touch-dribbling.md) describes the final behaviour.
+
 ## Goal
 
 The player can pick up a ball and dribble it with visible, timed touches. The ball is never glued to the feet and never teleports. Possession is guaranteed: with no defender, the player never loses the ball.

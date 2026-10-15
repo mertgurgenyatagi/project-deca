@@ -1,5 +1,10 @@
 # Handover: Tavernaball player movement & animation
 
+> **Update, branch `ball-interaction` (2026-10-15):** there is now a ball with touch dribbling. See [docs/touch-dribbling.md](docs/touch-dribbling.md).
+> - `player.gd` reads input through `move_input` / `sprint_held` (when `read_input` is on), has `class_name Player`, and exposes read-only state for the `Dribble` node. Its movement is unchanged.
+> - **The guiding constraint for everything new:** the game will be played online by about 5–6 friends, each on their own copy. Visuals needn't match across machines, the cleanest design wins, and the ball and dribble never read the keyboard.
+> - Run `tools/anim_tests/dribble_bench.gd` after any dribble or movement change.
+
 State as of 2026-10-15. Branch `initial-movement` is committed and merged into `development`. The full write-up is in [docs/initial-movement.md](docs/initial-movement.md).
 
 **Since this was written, the whole game was sped up ×1.2 (playback-speed sense).** Speeds, turn rates and blend rates are ×1.2, accelerations ×1.44, fades 0.25 s, and the idle plays at `idle_rate` 1.2. The constants below are the *PES-pace* values. For the current values and benches, see the docs §3.2, §4.5 and §5.
