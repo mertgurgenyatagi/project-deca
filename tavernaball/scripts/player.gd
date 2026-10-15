@@ -1,3 +1,4 @@
+class_name Player
 extends CharacterBody3D
 ## Arrow-key controlled player, timed against PES 2013 at jog and sprint
 ## pace, then run 20% faster than PES: speeds, turn rates and blend rates are
@@ -180,6 +181,9 @@ var action: Action:
 	get: return _action
 var action_dir: Vector2:
 	get: return _action_dir
+## Signed turn of the current turnback (+ left, − right); 0 when none.
+var turn_direction: float:
+	get: return _action_turn if _action in [Action.BRAKE, Action.PUSH_OFF] else 0.0
 var skeleton: Skeleton3D:
 	get: return _skeleton
 
@@ -491,6 +495,11 @@ func current_acceleration() -> float:
 ## blend that speed settles to.
 func phase_rate_at(speed: float) -> float:
 	return _phase_rate(speed, _sprint_weight_at(speed))
+
+
+## Jog/sprint blend the gait settles to at a ground speed.
+func sprint_weight_at(speed: float) -> float:
+	return _sprint_weight_at(speed)
 
 
 ## Model-space foot and toe points of the gait at a stride phase:

@@ -3,12 +3,17 @@
 [ext_resource type="PackedScene" path="res://scenes/pitch.tscn" id="1_pitch"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="Script" path="res://scripts/follow_camera.gd" id="3_camera"]
+[ext_resource type="PackedScene" path="res://scenes/ball.tscn" id="4_ball"]
 
 [node name="Main" type="Node3D"]
 
 [node name="Pitch" parent="." instance=ExtResource("1_pitch")]
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
+
+[node name="Ball" parent="." instance=ExtResource("4_ball")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.11, 0)
 
 [node name="Camera3D" type="Camera3D" parent="." node_paths=PackedStringArray("target")]
 transform = Transform3D(1, 0, 0, 0, 0.8704, 0.4924, 0, -0.4924, 0.8704, 0, 10, 24)

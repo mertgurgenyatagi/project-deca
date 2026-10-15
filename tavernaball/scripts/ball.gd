@@ -31,6 +31,7 @@ var _roll_time := 0.0
 
 func _ready() -> void:
 	process_physics_priority = 10
+	add_to_group(&"ball")
 	position.y = radius
 	release(position, Vector3.ZERO)
 
