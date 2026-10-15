@@ -1,0 +1,98 @@
+[gd_scene format=3 uid="uid://big4yi3nsnvhj"]
+
+[ext_resource type="Shader" path="res://shaders/concrete_pitch.gdshader" id="1_floor"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_horizon_color = Color(0.66, 0.73, 0.8, 1)
+ground_bottom_color = Color(0.16, 0.16, 0.17, 1)
+ground_horizon_color = Color(0.5, 0.53, 0.56, 1)
+
+[sub_resource type="Sky" id="Sky_day"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_day"]
+background_mode = 2
+sky = SubResource("Sky_day")
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 2
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_concrete"]
+frequency = 0.012
+fractal_octaves = 6
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_concrete"]
+width = 512
+height = 512
+seamless = true
+noise = SubResource("FastNoiseLite_concrete")
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_grain"]
+frequency = 0.08
+fractal_octaves = 3
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_grain_normal"]
+width = 512
+height = 512
+seamless = true
+as_normal_map = true
+bump_strength = 6.0
+noise = SubResource("FastNoiseLite_grain")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_pitch"]
+render_priority = 0
+shader = ExtResource("1_floor")
+shader_parameter/concrete_noise = SubResource("NoiseTexture2D_concrete")
+shader_parameter/concrete_normal = SubResource("NoiseTexture2D_grain_normal")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_surround"]
+render_priority = 0
+shader = ExtResource("1_floor")
+shader_parameter/concrete_color = Color(0.15, 0.15, 0.16, 1)
+shader_parameter/concrete_noise = SubResource("NoiseTexture2D_concrete")
+shader_parameter/concrete_normal = SubResource("NoiseTexture2D_grain_normal")
+shader_parameter/show_markings = false
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_pitch"]
+size = Vector3(36.5, 1, 27.5)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_pitch"]
+material = SubResource("ShaderMaterial_pitch")
+size = Vector2(36.5, 27.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_surround"]
+size = Vector3(400, 1, 400)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_surround"]
+material = SubResource("ShaderMaterial_surround")
+size = Vector2(400, 400)
+
+[node name="pitch" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_day")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.383, 0.3214, 0, 0.6428, 0.766, -0.5, -0.6634, 0.5567, 0, 20, 0)
+light_color = Color(1, 0.97, 0.92, 1)
+shadow_enabled = true
+directional_shadow_max_distance = 60.0
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_pitch")
+
+[node name="Surface" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("PlaneMesh_pitch")
+
+[node name="Surround" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Surround"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_surround")
+
+[node name="Surface" type="MeshInstance3D" parent="Surround"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+mesh = SubResource("PlaneMesh_surround")

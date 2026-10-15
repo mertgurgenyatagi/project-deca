@@ -1,0 +1,125 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://assets/characters/player/character.fbx" id="2_character"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/locomotion/idle.fbx" id="3_idle"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/locomotion/jog_forward.fbx" id="4_jog"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/turns/turn_180.fbx" id="5_turn"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/locomotion/sprint.fbx" id="6_sprint"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/starts/sprint_start.fbx" id="8_start"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1.8
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_idle"]
+animation = &"idle/idle"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_idle"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jog"]
+animation = &"jog_forward/jog_forward"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_jog"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_jog"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_sprint"]
+animation = &"sprint/sprint"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_sprint"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_sprint"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_gait"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_locomotion"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn"]
+animation = &"turn_180/turn_180"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_turn"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_turn"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_turn"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_start"]
+animation = &"sprint_start/sprint_start"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_start"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_start"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_start"]
+
+[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_root"]
+nodes/Idle/node = SubResource("AnimationNodeAnimation_idle")
+nodes/Idle/position = Vector2(-400, -120)
+nodes/IdleRate/node = SubResource("AnimationNodeTimeScale_idle")
+nodes/IdleRate/position = Vector2(-200, -120)
+nodes/Jog/node = SubResource("AnimationNodeAnimation_jog")
+nodes/Jog/position = Vector2(-640, 0)
+nodes/JogFreeze/node = SubResource("AnimationNodeTimeScale_jog")
+nodes/JogFreeze/position = Vector2(-440, 0)
+nodes/JogSeek/node = SubResource("AnimationNodeTimeSeek_jog")
+nodes/JogSeek/position = Vector2(-240, 0)
+nodes/Sprint/node = SubResource("AnimationNodeAnimation_sprint")
+nodes/Sprint/position = Vector2(-640, 140)
+nodes/SprintFreeze/node = SubResource("AnimationNodeTimeScale_sprint")
+nodes/SprintFreeze/position = Vector2(-440, 140)
+nodes/SprintSeek/node = SubResource("AnimationNodeTimeSeek_sprint")
+nodes/SprintSeek/position = Vector2(-240, 140)
+nodes/Gait/node = SubResource("AnimationNodeBlend2_gait")
+nodes/Gait/position = Vector2(-40, 60)
+nodes/Locomotion/node = SubResource("AnimationNodeBlend2_locomotion")
+nodes/Locomotion/position = Vector2(160, 0)
+nodes/Turn/node = SubResource("AnimationNodeAnimation_turn")
+nodes/Turn/position = Vector2(-640, 300)
+nodes/TurnFreeze/node = SubResource("AnimationNodeTimeScale_turn")
+nodes/TurnFreeze/position = Vector2(-440, 300)
+nodes/TurnSeek/node = SubResource("AnimationNodeTimeSeek_turn")
+nodes/TurnSeek/position = Vector2(-240, 300)
+nodes/TurnBlend/node = SubResource("AnimationNodeBlend2_turn")
+nodes/TurnBlend/position = Vector2(360, 120)
+nodes/Start/node = SubResource("AnimationNodeAnimation_start")
+nodes/Start/position = Vector2(-640, 580)
+nodes/StartFreeze/node = SubResource("AnimationNodeTimeScale_start")
+nodes/StartFreeze/position = Vector2(-440, 580)
+nodes/StartSeek/node = SubResource("AnimationNodeTimeSeek_start")
+nodes/StartSeek/position = Vector2(-240, 580)
+nodes/StartBlend/node = SubResource("AnimationNodeBlend2_start")
+nodes/StartBlend/position = Vector2(760, 360)
+nodes/output/position = Vector2(960, 360)
+node_connections = [&"JogFreeze", 0, &"Jog", &"JogSeek", 0, &"JogFreeze", &"SprintFreeze", 0, &"Sprint", &"SprintSeek", 0, &"SprintFreeze", &"Gait", 0, &"JogSeek", &"Gait", 1, &"SprintSeek", &"IdleRate", 0, &"Idle", &"Locomotion", 0, &"IdleRate", &"Locomotion", 1, &"Gait", &"TurnFreeze", 0, &"Turn", &"TurnSeek", 0, &"TurnFreeze", &"TurnBlend", 0, &"Locomotion", &"TurnBlend", 1, &"TurnSeek", &"StartFreeze", 0, &"Start", &"StartSeek", 0, &"StartFreeze", &"StartBlend", 0, &"TurnBlend", &"StartBlend", 1, &"StartSeek", &"output", 0, &"StartBlend"]
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Character" parent="Model" instance=ExtResource("2_character")]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+root_node = NodePath("../Model/Character")
+libraries = {
+&"idle": ExtResource("3_idle"),
+&"jog_forward": ExtResource("4_jog"),
+&"sprint": ExtResource("6_sprint"),
+&"sprint_start": ExtResource("8_start"),
+&"turn_180": ExtResource("5_turn")
+}
+tree_root = SubResource("AnimationNodeBlendTree_root")
+parameters/IdleRate/scale = 1.2
+parameters/JogFreeze/scale = 0.0
+parameters/SprintFreeze/scale = 0.0
+parameters/Gait/blend_amount = 0.0
+parameters/Locomotion/blend_amount = 0.0
+parameters/TurnFreeze/scale = 0.0
+parameters/TurnBlend/blend_amount = 0.0
+parameters/StartFreeze/scale = 0.0
+parameters/StartBlend/blend_amount = 0.0

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "godot-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["C:/Users/Mert/Desktop/repos/godot-mcp/server/build/index.js"],
+      "env": { "GODOT_MCP_PORT": "6505" }
+    }
+  }
+}
