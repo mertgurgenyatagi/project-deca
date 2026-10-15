@@ -21,6 +21,9 @@ extends Node
 ## - Stopping and turnbacks only ever slow the ball along its path, never pull
 ##   it back toward the player: it rests in front, or for a turnback, beside
 ##   where the player stops, on the side the body turns.
+## - For a kick (see Passing), the ball is set down where the kicking foot
+##   will meet it once the player has planted and turned, routed round the
+##   side rather than through the legs when the body turns far.
 ##
 ## Everything here reads the player's state (position, velocity, facing,
 ## stride, input), never the keyboard. A copy of a player driven by the
@@ -103,6 +106,21 @@ enum Foot { LEFT, RIGHT }
 ## for it and makes the touch. Kept small: too large and the ball answers the
 ## keys at once, as if attached.
 @export var reach_for_ball := 0.14
+
+@export_group("Kick")
+## Setting the ball for a kick, it is taken round the side when its way to
+## the kicking foot passes this close to the player (m)...
+@export var kick_clearance := 0.25
+## ...through a point this far to the side of where the player stops (m).
+@export var kick_side := 0.35
+## Steering allowed on the ball during the swing (m/s²), so it meets the foot.
+@export var swing_bend := 30.0
+## Turning less than this (degrees) for a kick, the player plants beside the
+## ball wherever it comes to rest; more, and the ball is brought to the player.
+@export var plant_turn := 100.0
+## Planted and turned for a kick, a toe this close to a ball not yet where the
+## kicking foot will meet it (m) nudges it there.
+@export var set_touch_reach := 0.12
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
 ## Below this predicted speed (m/s) at the next touch, the ball is brought to rest instead.
@@ -119,12 +137,17 @@ const CONTACT_COOLDOWN := 0.08
 const CONTACT_PUSH := 0.4
 ## Half-thickness of the foot capsule (m).
 const FOOT_RADIUS := 0.03
+## Time a set touch gives the ball to reach the kicking foot (s).
+const SET_TIME := 0.2
 const TOE_BONES := ["mixamorig_LeftToeBase", "mixamorig_RightToeBase"]
 const ANKLE_BONES := ["mixamorig_LeftFoot", "mixamorig_RightFoot"]
 
 ## Read-outs for tests.
 var touch_log: Array[Dictionary] = []
 var bend_now := 0.0
+## Where the player should stop to kick the ball where it comes to rest (INF:
+## nowhere in particular); player.gd times the plant to it.
+var plant_point := Vector2.INF
 
 var ball: Ball
 var _resting := false
@@ -159,8 +182,11 @@ var _latched_sprint := false
 ## change waits (see gate_input).
 var _effective_input := Vector2.ZERO
 var _was_pending := false
+## Taken on the move for a first-time kick: the ball keeps its pace into the foot.
+var _first_time := false
 
 @onready var _player: Player = get_parent()
+@onready var _passing: Passing = get_parent().get_node_or_null(^"Passing")
 
 
 func _physics_process(delta: float) -> void:
@@ -231,13 +257,19 @@ func intent_turn() -> float:
 
 
 func intent_stop() -> bool:
-	return holding() and _raw_input == Vector2.ZERO and _latched_input != Vector2.ZERO
+	return holding() and not _kick_planned() and _raw_input == Vector2.ZERO and _latched_input != Vector2.ZERO
 
 
 func intent_sprint() -> int:
-	if not holding() or _raw_sprint == _latched_sprint or _raw_input == Vector2.ZERO:
+	if not holding() or _kick_planned() or _raw_sprint == _latched_sprint or _raw_input == Vector2.ZERO:
 		return 0
 	return 1 if _raw_sprint else -1
+
+
+## Whether the ball is being set for a kick: one is under way, or about to be
+## (a pass is decided and waits for the ball).
+func _kick_planned() -> bool:
+	return _player.action == Player.Action.KICK or (_passing != null and _passing.waiting())
 
 
 ## At sprint pace touches keep their own even rhythm: a waiting change is
@@ -248,6 +280,9 @@ func _sprint_rhythm() -> bool:
 
 ## Whether a new direction, or a stop or start, is waiting for a touch.
 func _direction_pending() -> bool:
+	if _kick_planned():
+		# A kick ignores the keys.
+		return false
 	if (_raw_input == Vector2.ZERO) != (_latched_input == Vector2.ZERO):
 		return true
 	if _raw_input == Vector2.ZERO:
@@ -286,11 +321,25 @@ func can_take(b: Ball) -> bool:
 	return gap <= pickup_reach
 
 
-## Lets the ball go from the player's feet (the debug knock, later passes and shots).
-func release(velocity: Vector3) -> void:
+## Lets the ball go from the player's feet (the debug knock, passes, later
+## shots), hopping off the ground at `hop` m/s.
+func release(velocity: Vector3, hop := 0.0) -> void:
 	if ball and ball.holder == _player:
 		_wait_for_clear = true
-		ball.release(ball.position, velocity, _player)
+		_first_time = false
+		ball.release(ball.position, velocity, _player, hop)
+
+
+## Takes a loose ball on the move for a first-time kick: no touch, the ball
+## keeps its pace and is steered into the swinging foot.
+func take_for_kick() -> void:
+	if ball and ball.holder == null:
+		ball.holder = _player
+		_first_time = true
+		_resting = false
+		_clamped = true
+		_planned_accel = Vector3.ZERO
+		_since_touch = 0.0
 
 
 ## Clears touch state when a test teleports the player or the ball.
@@ -386,6 +435,9 @@ func _sim_step(s: Sim, dt: float) -> void:
 			speed = move_toward(speed, top, accel * dt)
 			s.velocity = p.action_dir * speed
 			s.yaw = atan2(p.action_dir.x, p.action_dir.y)
+		Player.Action.KICK:
+			speed = move_toward(speed, 0.0, p.kick_brake * dt)
+			s.velocity = s.velocity.normalized() * speed
 		_:
 			if input == Vector2.ZERO:
 				speed = move_toward(speed, 0.0, p.deceleration * dt)
@@ -483,6 +535,8 @@ func _grip_at(speed: float) -> float:
 ## Where the ball should next arrive, when, and how fast.
 ## Returns [target, time_left, arrival_velocity] in world space.
 func _target() -> Array:
+	if _kick_planned():
+		return _strike_target()
 	if _player.action == Player.Action.BRAKE or _player.would_turn_back(_latched_input):
 		return _turnback_target()
 	if _pivoting():
@@ -518,6 +572,86 @@ func _turnback_target() -> Array:
 	var left := Vector2(old_dir.y, -old_dir.x)
 	var at := s.position + old_dir * turnback_ball_ahead + left * turn * turnback_ball_side
 	return [Vector3(at.x, ball.radius, at.y), maxf(s.time, PREDICT_STEP), Vector3.ZERO]
+
+
+## Setting the ball for a kick:
+## - While the player plants and turns a little (up to `plant_turn`), the ball
+##   is slowed to rest along its own path, and the player times the plant to
+##   stop beside it, where the kicking foot will meet it (`plant_point`).
+## - For a bigger turn the player plants as hard as allowed, and the ball comes
+##   to rest where the foot will meet it once turned, in front of where the
+##   player stops; if its way there would pass through the player, it goes
+##   round the side the body turns toward first.
+## - Planted and turned, the ball is brought the last bit to the foot.
+## - Once the swing starts, it is steered to meet the foot at contact.
+func _strike_target() -> Array:
+	var offset := _strike_offset()
+	plant_point = Vector2.INF
+	if _player.kick_swinging:
+		var left := maxf((_player.kick_contact_time - _player.kick_time) / _player.kick_rate, PREDICT_STEP)
+		var arrival := ball.velocity if _first_time else Vector3.ZERO
+		return [_world(_hips(), _player.yaw, offset), left, arrival]
+	var yaw := _player.kick_yaw if _player.action == Player.Action.KICK else _passing.planned_yaw()
+	if _player.kick_ready():
+		return [_world(_kick_stop(), yaw, offset), SET_TIME, Vector3.ZERO]
+	var from := _ground(ball.position)
+	if absf(angle_difference(_player.yaw, yaw)) <= deg_to_rad(plant_turn):
+		var rest := ball.position
+		var speed := ball.velocity.length()
+		if speed > 0.05:
+			rest += ball.velocity / speed * speed * speed / (2.0 * (ball.roll_deceleration + free_braking))
+		plant_point = _ground(rest) - _ground(Basis(Vector3.UP, yaw) * offset)
+		return [rest, maxf(2.0 * rest.distance_to(ball.position) / maxf(speed, 0.05), MIN_SEGMENT_TIME), Vector3.ZERO]
+	var stop := _kick_stop()
+	var target := _world(stop, yaw, offset)
+	var time := _player.kick_lead_time(yaw) - _player.kick_contact_time / _player.kick_rate
+	var to := _ground(target)
+	if Geometry2D.get_closest_point_to_segment(stop, from, to).distance_to(stop) < kick_clearance \
+			and from.distance_to(to) > kick_clearance:
+		# Round the side the body turns toward, not through the legs.
+		var turn := signf(angle_difference(_player.yaw, yaw))
+		if turn == 0.0:
+			turn = 1.0
+		var facing := Vector2(sin(_player.yaw), cos(_player.yaw))
+		var side := Vector2(facing.y, -facing.x) * turn
+		var at := stop + side * kick_side + facing * 0.1
+		target = Vector3(at.x, ball.radius, at.y)
+	return [target, maxf(time, MIN_SEGMENT_TIME), Vector3.ZERO]
+
+
+## Where the player stops, braking as hard as a kick's plant allows.
+func _kick_stop() -> Vector2:
+	var v := _player.ground_velocity
+	if v.length() == 0.0:
+		return _hips()
+	return _hips() + v.normalized() * v.length_squared() / (2.0 * _player.kick_brake)
+
+
+## Whether a swing starting now would meet the ball: where the kicking foot
+## will be at contact (the plant braking on meanwhile) against where the ball
+## will be, within `reach` (m).
+func ball_meets_foot(reach: float) -> bool:
+	var t := _player.kick_contact_time / _player.kick_rate
+	var v := _player.ground_velocity
+	var speed := v.length()
+	var hips := _hips()
+	if speed > 0.0:
+		var brake := _player.kick_brake
+		hips += v / speed * (speed * speed / (2.0 * brake) if speed < brake * t else speed * t - 0.5 * brake * t * t)
+	var spot := _ground(strike_point(hips, _player.kick_yaw))
+	return (_ground(ball.position) + _ground(ball.velocity) * t).distance_to(spot) <= reach
+
+
+## Model-space centre of the ball where the kick's foot meets it.
+func _strike_offset() -> Vector3:
+	var feet := _player.kick_contact_feet()
+	var tip := feet[1] + (feet[1] - feet[0]).normalized() * toe_tip
+	return Vector3(tip.x, 0.0, tip.z + ball.radius)
+
+
+## Where the kicking foot meets the ball for a body at `at` facing `yaw` (world).
+func strike_point(at: Vector2, yaw: float) -> Vector3:
+	return _world(at, yaw, _strike_offset())
 
 
 ## Turning far round on the spot (not fast enough for a turnback).
@@ -603,7 +737,7 @@ func _touch(kind: String, contact := {}) -> void:
 		_resting = false
 		_touch_after(jog_touch_steps * 0.5 - 0.25, -1)
 	var plan := _target()
-	if _resting:
+	if _resting and not _kick_planned():
 		# The stopping touch rolls the ball to just in front of where the player stops.
 		plan = _rest_point()
 	var target: Vector3 = plan[0]
@@ -643,7 +777,19 @@ func _touch(kind: String, contact := {}) -> void:
 func _steer(delta: float) -> void:
 	_update_resting()
 	var contact := _foot_contact(delta)
-	if not _resting and _phase >= _next_touch_phase:
+	if _kick_planned():
+		_resting = false
+	else:
+		plant_point = Vector2.INF
+	if _player.kick_swinging:
+		# The kick's foot is coming for the ball: no touches, the ball is
+		# steered to meet it.
+		_bend_cap = maxf(_bend_cap, swing_bend)
+	elif _player.kick_ready() and _since_touch > CONTACT_COOLDOWN and contact.gap < set_touch_reach \
+			and not ball_meets_foot(_passing.set_reach):
+		# Planted and turned: a foot by the ball nudges it to where the kick meets it.
+		_touch("set")
+	elif not _resting and _phase >= _next_touch_phase:
 		if _contact_error() <= miss_distance:
 			_touch("regular")
 		else:

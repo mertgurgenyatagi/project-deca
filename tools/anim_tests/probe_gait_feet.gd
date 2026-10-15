@@ -6,6 +6,8 @@ extends SceneTree
 
 func _initialize() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
+	# The stand-in teammates are for trying passes; they would only get in the way here.
+	main.get_node("Teammates").free()
 	root.add_child(main)
 	var player = main.get_node("Player")
 	await process_frame

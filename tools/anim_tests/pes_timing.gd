@@ -8,6 +8,8 @@ var player: CharacterBody3D
 
 func _initialize() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
+	# The stand-in teammates are for trying passes; they would only get in the way here.
+	main.get_node("Teammates").free()
 	root.add_child(main)
 	# Movement is measured without the ball (holding it gates turns).
 	main.get_node("Ball").free()

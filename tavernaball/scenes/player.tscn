@@ -9,6 +9,12 @@
 [ext_resource type="AnimationLibrary" path="res://assets/animations/starts/sprint_start.fbx" id="8_start"]
 [ext_resource type="Script" path="res://scripts/dribble.gd" id="9_dribble"]
 [ext_resource type="Script" path="res://scripts/intent_lean.gd" id="10_lean"]
+[ext_resource type="AnimationLibrary" path="res://assets/animations/kicks/pass_kick.fbx" id="11_kick"]
+[ext_resource type="Script" path="res://scripts/passing.gd" id="12_passing"]
+[ext_resource type="AudioStream" path="res://assets/sfx/pass_1.ogg" id="13_sfx1"]
+[ext_resource type="AudioStream" path="res://assets/sfx/pass_2.ogg" id="14_sfx2"]
+[ext_resource type="AudioStream" path="res://assets/sfx/pass_3.ogg" id="15_sfx3"]
+[ext_resource type="AudioStream" path="res://assets/sfx/pass_4.ogg" id="16_sfx4"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.3
@@ -55,6 +61,15 @@ animation = &"sprint_start/sprint_start"
 
 [sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_start"]
 
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kick"]
+animation = &"pass_kick/pass_kick"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kick"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_kick"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_kick"]
+
 [sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_root"]
 nodes/Idle/node = SubResource("AnimationNodeAnimation_idle")
 nodes/Idle/position = Vector2(-400, -120)
@@ -92,8 +107,16 @@ nodes/StartSeek/node = SubResource("AnimationNodeTimeSeek_start")
 nodes/StartSeek/position = Vector2(-240, 580)
 nodes/StartBlend/node = SubResource("AnimationNodeBlend2_start")
 nodes/StartBlend/position = Vector2(760, 360)
-nodes/output/position = Vector2(960, 360)
-node_connections = [&"JogFreeze", 0, &"Jog", &"JogSeek", 0, &"JogFreeze", &"SprintFreeze", 0, &"Sprint", &"SprintSeek", 0, &"SprintFreeze", &"Gait", 0, &"JogSeek", &"Gait", 1, &"SprintSeek", &"IdleRate", 0, &"Idle", &"Locomotion", 0, &"IdleRate", &"Locomotion", 1, &"Gait", &"TurnFreeze", 0, &"Turn", &"TurnSeek", 0, &"TurnFreeze", &"TurnBlend", 0, &"Locomotion", &"TurnBlend", 1, &"TurnSeek", &"StartFreeze", 0, &"Start", &"StartSeek", 0, &"StartFreeze", &"StartBlend", 0, &"TurnBlend", &"StartBlend", 1, &"StartSeek", &"output", 0, &"StartBlend"]
+nodes/Kick/node = SubResource("AnimationNodeAnimation_kick")
+nodes/Kick/position = Vector2(-640, 760)
+nodes/KickFreeze/node = SubResource("AnimationNodeTimeScale_kick")
+nodes/KickFreeze/position = Vector2(-440, 760)
+nodes/KickSeek/node = SubResource("AnimationNodeTimeSeek_kick")
+nodes/KickSeek/position = Vector2(-240, 760)
+nodes/KickBlend/node = SubResource("AnimationNodeBlend2_kick")
+nodes/KickBlend/position = Vector2(960, 480)
+nodes/output/position = Vector2(1160, 480)
+node_connections = [&"JogFreeze", 0, &"Jog", &"JogSeek", 0, &"JogFreeze", &"SprintFreeze", 0, &"Sprint", &"SprintSeek", 0, &"SprintFreeze", &"Gait", 0, &"JogSeek", &"Gait", 1, &"SprintSeek", &"IdleRate", 0, &"Idle", &"Locomotion", 0, &"IdleRate", &"Locomotion", 1, &"Gait", &"TurnFreeze", 0, &"Turn", &"TurnSeek", 0, &"TurnFreeze", &"TurnBlend", 0, &"Locomotion", &"TurnBlend", 1, &"TurnSeek", &"StartFreeze", 0, &"Start", &"StartSeek", 0, &"StartFreeze", &"StartBlend", 0, &"TurnBlend", &"StartBlend", 1, &"StartSeek", &"KickFreeze", 0, &"Kick", &"KickSeek", 0, &"KickFreeze", &"KickBlend", 0, &"StartBlend", &"KickBlend", 1, &"KickSeek", &"output", 0, &"KickBlend"]
 
 [node name="Player" type="CharacterBody3D"]
 script = ExtResource("1_player")
@@ -111,6 +134,7 @@ root_node = NodePath("../Model/Character")
 libraries = {
 &"idle": ExtResource("3_idle"),
 &"jog_forward": ExtResource("4_jog"),
+&"pass_kick": ExtResource("11_kick"),
 &"sprint": ExtResource("6_sprint"),
 &"sprint_start": ExtResource("8_start"),
 &"turn_180": ExtResource("5_turn")
@@ -125,9 +149,15 @@ parameters/TurnFreeze/scale = 0.0
 parameters/TurnBlend/blend_amount = 0.0
 parameters/StartFreeze/scale = 0.0
 parameters/StartBlend/blend_amount = 0.0
+parameters/KickFreeze/scale = 0.0
+parameters/KickBlend/blend_amount = 0.0
 
 [node name="Dribble" type="Node" parent="."]
 script = ExtResource("9_dribble")
+
+[node name="Passing" type="Node" parent="."]
+script = ExtResource("12_passing")
+sounds = Array[AudioStream]([ExtResource("13_sfx1"), ExtResource("14_sfx2"), ExtResource("15_sfx3"), ExtResource("16_sfx4")])
 
 [node name="IntentLean" type="SkeletonModifier3D" parent="Model/Character/Skeleton3D"]
 script = ExtResource("10_lean")

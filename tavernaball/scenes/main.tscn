@@ -5,6 +5,8 @@
 [ext_resource type="Script" path="res://scripts/follow_camera.gd" id="3_camera"]
 [ext_resource type="PackedScene" path="res://scenes/ball.tscn" id="4_ball"]
 [ext_resource type="Script" path="res://scripts/debug_keys.gd" id="5_debug"]
+[ext_resource type="Script" path="res://scripts/teammate_ai.gd" id="6_mate"]
+[ext_resource type="Script" path="res://scripts/pass_bar.gd" id="7_bar"]
 
 [node name="Main" type="Node3D"]
 
@@ -16,6 +18,24 @@ script = ExtResource("5_debug")
 [node name="Player" parent="." instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 
+[node name="Teammates" type="Node3D" parent="."]
+
+[node name="Near" parent="Teammates" instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, -3)
+
+[node name="TeammateAI" type="Node" parent="Teammates/Near"]
+script = ExtResource("6_mate")
+pass_back_to = NodePath("../../../Player")
+facing = -67.0
+
+[node name="Far" parent="Teammates" instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, -3)
+
+[node name="TeammateAI" type="Node" parent="Teammates/Far"]
+script = ExtResource("6_mate")
+pass_back_to = NodePath("../../../Player")
+facing = -78.0
+
 [node name="Ball" parent="." instance=ExtResource("4_ball")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.11, 0)
 
@@ -25,3 +45,16 @@ current = true
 fov = 34.0
 script = ExtResource("3_camera")
 target = NodePath("../Player")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+
+[node name="PassBar" type="Control" parent="Hud"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("7_bar")
+player_path = NodePath("../../Player")
