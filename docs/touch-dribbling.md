@@ -62,6 +62,7 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   - **Turnback:** the ball is set down beside where the player will stop (§3.4).
   - **Standing pivot past 100°:** the ball is taken round to the side the body turns toward, not through the feet.
   - **Stop:** the ball is rolled to `rest_distance` in front of where the player will stop.
+- **The path shows what's coming.** While a turn waits, the player drifts slightly toward it: up to `approach_angle` (12°) at a 90°+ turn, less for smaller turns, and toward the turning side for a turnback. So the foot meets the ball from a slightly different angle. While a stop waits, the player eases off to `stop_ease` (85%) of their speed. The ball's prediction uses this adjusted path.
 - **A hint of what's coming (`intent_lean.gd`).** While a change waits, an `IntentLean` modifier on the skeleton gives the faintest body cue:
   - **turn:** the shoulders and head start to turn toward the new direction (torso up to 10°, head up to 8° more), with a 2.5° lean into the turn
   - **stop:** a 4° lean back

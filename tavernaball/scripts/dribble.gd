@@ -82,6 +82,11 @@ enum Foot { LEFT, RIGHT }
 ## A held ball this close to the hips (m) counts as at the feet: a waiting
 ## change of direction can be made with a touch.
 @export var control_reach := 0.5
+## While a turn waits for the ball, the player drifts this far toward it
+## (degrees, at a 90° turn or more; less for smaller turns).
+@export var approach_angle := 12.0
+## While a stop waits for the ball, the player eases off to this share of speed.
+@export var stop_ease := 0.85
 
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
@@ -134,6 +139,9 @@ var _raw_input := Vector2.ZERO
 var _raw_sprint := false
 var _latched_input := Vector2.ZERO
 var _latched_sprint := false
+## What the player actually moves on: the latched input, adjusted while a
+## change waits (see gate_input).
+var _effective_input := Vector2.ZERO
 var _was_pending := false
 
 @onready var _player: Player = get_parent()
@@ -178,11 +186,23 @@ func gate_input(raw: Vector2) -> Vector2:
 	_raw_input = raw
 	if not holding():
 		_latched_input = raw
+		_effective_input = raw
 		return raw
-	if _direction_pending() and _latched_input == Vector2.ZERO and _player.action == Player.Action.NONE:
-		var to_ball := _ground(ball.position) - _hips()
-		return Vector2.ZERO if to_ball.length() <= control_reach else to_ball.normalized()
-	return _latched_input
+	_effective_input = _latched_input
+	if _direction_pending() and _player.action == Player.Action.NONE:
+		if _latched_input == Vector2.ZERO:
+			var to_ball := _ground(ball.position) - _hips()
+			_effective_input = Vector2.ZERO if to_ball.length() <= control_reach else to_ball.normalized()
+		elif raw == Vector2.ZERO:
+			# A stop is coming: ease off a little on the way to the ball.
+			_effective_input = _latched_input * stop_ease
+		else:
+			# A turn is coming: drift slightly toward it, so the foot meets the
+			# ball from a slightly different angle, already setting up the turn.
+			var turn := _player.turn_for(raw)
+			var share := clampf(absf(turn) / (PI * 0.5), 0.0, 1.0)
+			_effective_input = _latched_input.rotated(-signf(turn) * deg_to_rad(approach_angle) * share)
+	return _effective_input
 
 
 ## Sprint the player may act on: with the ball, it changes only at a touch.
@@ -227,6 +247,7 @@ func _direction_pending() -> bool:
 func _latch() -> void:
 	_latched_input = _raw_input
 	_latched_sprint = _raw_sprint
+	_effective_input = _raw_input
 
 
 ## The pickup rule: a loose ball close enough, unless this player just let it
@@ -322,7 +343,7 @@ func _sim_start() -> Sim:
 
 func _sim_step(s: Sim, dt: float) -> void:
 	var p := _player
-	var input := _latched_input
+	var input := _effective_input
 	var top := p.sprint_speed if _latched_sprint else p.move_speed
 	var accel := p.sprint_acceleration if _latched_sprint else p.acceleration
 	var speed := s.speed
