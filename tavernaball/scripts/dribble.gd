@@ -82,7 +82,7 @@ enum Foot { LEFT, RIGHT }
 ## A held ball this close to the hips (m) counts as at the feet: a waiting
 ## change of direction can be made with a touch.
 @export var control_reach := 0.5
-## While a turn waits for the ball, the player drifts this far toward it
+## While a turn waits for the ball, the player drifts this far away from it
 ## (degrees, at a 90° turn or more; less for smaller turns).
 @export var approach_angle := 12.0
 ## While a stop waits for the ball, the player eases off to this share of speed.
@@ -197,11 +197,11 @@ func gate_input(raw: Vector2) -> Vector2:
 			# A stop is coming: ease off a little on the way to the ball.
 			_effective_input = _latched_input * stop_ease
 		else:
-			# A turn is coming: drift slightly toward it, so the foot meets the
-			# ball from a slightly different angle, already setting up the turn.
+			# A turn is coming: drift slightly away from it, so the foot meets
+			# the ball from the far side, shaping to take it round into the turn.
 			var turn := _player.turn_for(raw)
 			var share := clampf(absf(turn) / (PI * 0.5), 0.0, 1.0)
-			_effective_input = _latched_input.rotated(-signf(turn) * deg_to_rad(approach_angle) * share)
+			_effective_input = _latched_input.rotated(signf(turn) * deg_to_rad(approach_angle) * share)
 	return _effective_input
 
 
