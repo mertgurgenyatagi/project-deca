@@ -250,10 +250,24 @@ func _direction_pending() -> bool:
 
 
 ## Lets the player act on the keys as they are now.
+## At a sprint (PES style) one touch takes the run at most one notch round:
+## a bigger change is made notch by notch, a touch each, so the ball is
+## knocked along every notch.
 func _latch() -> void:
-	_latched_input = _raw_input
+	var input := _raw_input
+	var notch := deg_to_rad(_player.sprint_notch)
+	if _raw_sprint and notch > 0.0 and input != Vector2.ZERO \
+			and _player.ground_velocity.length() >= _player.move_speed and not _player.would_turn_back(input):
+		var heading := roundf(_player.yaw / notch) * notch
+		var turn := angle_difference(heading, atan2(input.x, input.y))
+		if absf(turn) > notch * 0.5:
+			var step := heading + signf(turn) * notch
+			input = Vector2(sin(step), cos(step)) * input.length()
+			# Still short of the keys: the next step brings the next touch.
+			_was_pending = false
+	_latched_input = input
 	_latched_sprint = _raw_sprint
-	_effective_input = _raw_input
+	_effective_input = input
 
 
 ## The pickup rule: a loose ball close enough, unless this player just let it
