@@ -194,6 +194,26 @@ func gate_sprint(raw: bool) -> bool:
 	return _latched_sprint
 
 
+## What the player wants to do but is waiting for the ball to do, for the
+## body to hint at: the signed turn toward the new direction (rad, + left;
+## 0 if none), whether a stop is waiting, and a sprint change (+1 start, -1
+## ease off, 0 none).
+func intent_turn() -> float:
+	if not holding() or not _direction_pending() or _raw_input == Vector2.ZERO:
+		return 0.0
+	return angle_difference(_player.yaw, atan2(_raw_input.x, _raw_input.y))
+
+
+func intent_stop() -> bool:
+	return holding() and _raw_input == Vector2.ZERO and _latched_input != Vector2.ZERO
+
+
+func intent_sprint() -> int:
+	if not holding() or _raw_sprint == _latched_sprint or _raw_input == Vector2.ZERO:
+		return 0
+	return 1 if _raw_sprint else -1
+
+
 ## Whether a new direction, or a stop or start, is waiting for a touch.
 func _direction_pending() -> bool:
 	if (_raw_input == Vector2.ZERO) != (_latched_input == Vector2.ZERO):
