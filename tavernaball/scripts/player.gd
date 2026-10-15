@@ -234,6 +234,14 @@ var _sprint_weight := 0.0
 ## Smoothed turning contribution to leg speed (m/s); turn rate can change
 ## abruptly, the legs must not.
 var _turn_motion := 0.0
+## Stride length as a share of the clips' own (smoothed): below 1 with the
+## ball at a jog, for quicker, shorter steps. The leg swing is shrunk to match
+## by mixing in some of the idle pose, so planted feet stay planted.
+var _stride := 1.0
+
+## Current stride share (1 = the clips' own stride).
+var stride: float:
+	get: return _stride
 
 @onready var _model: Node3D = $Model
 @onready var _skeleton: Skeleton3D = $Model/Character/Skeleton3D
@@ -529,6 +537,11 @@ func phase_rate_at(speed: float) -> float:
 	return _phase_rate(speed, _sprint_weight_at(speed))
 
 
+## Model-space foot and toe points of the idle pose (as `gait_feet_at`).
+func idle_feet() -> PackedVector3Array:
+	return _feet_at(_idle_anim, 0.0)
+
+
 ## Jog/sprint blend the gait settles to at a ground speed.
 func sprint_weight_at(speed: float) -> float:
 	return _sprint_weight_at(speed)
@@ -584,8 +597,9 @@ func _sprint_weight_at(speed: float) -> float:
 
 
 ## Stride phase advance per second at a ground speed and jog/sprint weight.
+## Shorter strides (with the ball) turn the legs over faster.
 func _phase_rate(speed: float, sprint_weight: float) -> float:
-	var cycle := lerpf(_jog_cycle, _sprint_cycle, sprint_weight)
+	var cycle := lerpf(_jog_cycle, _sprint_cycle, sprint_weight) * _stride
 	return maxf(speed / cycle, min_jog_rate / _jog_length)
 
 
@@ -674,6 +688,7 @@ func _bone_rotation(anim: Animation, bone_name: String, time: float) -> Quaterni
 
 func _update_animation(delta: float) -> void:
 	var weight := 1.0 - exp(-blend_sharpness * delta)
+	_stride = lerpf(_stride, _dribble.stride_scale() if _dribble else 1.0, weight)
 	_turn_motion = lerpf(_turn_motion, _yaw_rate * turn_step_radius, weight)
 	var real := get_real_velocity()
 	var ground_speed := Vector2(real.x, real.z).length()
@@ -688,7 +703,8 @@ func _update_animation(delta: float) -> void:
 	else:
 		_gait_phase = fposmod(_gait_phase + _phase_rate(speed, _sprint_weight) * delta, 1.0)
 	_anim_tree.set(&"parameters/IdleRate/scale", idle_rate)
-	_anim_tree.set(&"parameters/Locomotion/blend_amount", _blend)
+	# Shorter strides: shrink the leg swing to match by mixing in the idle.
+	_anim_tree.set(&"parameters/Locomotion/blend_amount", _blend * _stride)
 	_anim_tree.set(&"parameters/Gait/blend_amount", _sprint_weight)
 	_anim_tree.set(&"parameters/JogSeek/seek_request", fposmod(_gait_phase + _jog_offset, 1.0) * _jog_length)
 	_anim_tree.set(&"parameters/SprintSeek/seek_request", fposmod(_gait_phase + _sprint_offset, 1.0) * _sprint_length)

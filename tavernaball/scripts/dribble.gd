@@ -42,9 +42,9 @@ enum Foot { LEFT, RIGHT }
 ## Toe tip length past the toe joint (m).
 @export var toe_tip := 0.06
 ## Ball sits this far to the outside of the touching foot (m).
-@export var touch_side_offset := 0.04
+@export var touch_side_offset := 0.08
 ## Ball's speed arriving at the next touch, as a share of the player's.
-@export var arrival_speed_ratio := 0.7
+@export var arrival_speed_ratio := 0.8
 ## The same at a full sprint (lower = longer knocks).
 @export var sprint_arrival_ratio := 0.4
 ## A touch sends the ball at most this many times the player's speed...
@@ -71,6 +71,12 @@ enum Foot { LEFT, RIGHT }
 ## A touch that takes the ball round a corner costs the player this share of
 ## their speed at a 180° change (proportionally less for smaller ones).
 @export var redirect_slowdown := 0.5
+
+@export_group("Stride")
+## With the ball, jog strides are this share of their normal length at the
+## same speed: quicker, shorter steps (and so quicker touches). The sprint
+## keeps its stride.
+@export var dribble_stride := 0.75
 
 @export_group("Control")
 ## Steering on the ball between touches (m/s²) before the cap starts growing.
@@ -151,6 +157,7 @@ var _touch_phase_jog := [0.0, 0.0]
 var _touch_phase_sprint := [0.0, 0.0]
 var _toe_bones := [-1, -1]
 var _ankle_bones := [-1, -1]
+var _idle_feet := PackedVector3Array()
 var _last_toes := [Vector3.INF, Vector3.INF]
 var _clock := 0.0
 ## The keys as pressed, and the direction and sprint the player is allowed to
@@ -298,6 +305,7 @@ func _late_ready() -> void:
 		_ankle_bones[f] = _player.skeleton.find_bone(ANKLE_BONES[f])
 	_last_raw_phase = _player.gait_phase
 	_next_foot = preferred_foot
+	_idle_feet = _player.idle_feet()
 
 
 ## Stride phase at which a foot touches: just before its toe reaches furthest forward.
@@ -321,7 +329,8 @@ func _touch_phase(foot: int, weight: float) -> float:
 
 ## Model-space centre of the ball where a foot touches it at a stride phase.
 func _contact_offset(foot: int, phase: float, weight: float) -> Vector3:
-	var toe := _player.gait_feet_at(phase, weight)[foot * 2 + 1]
+	# Shorter strides mix in the idle pose, which pulls the toe toward its idle spot.
+	var toe := _idle_feet[foot * 2 + 1].lerp(_player.gait_feet_at(phase, weight)[foot * 2 + 1], _player.stride)
 	var outward := 1.0 if foot == Foot.LEFT else -1.0
 	return Vector3(toe.x + outward * touch_side_offset, 0.0, toe.z + toe_tip + ball.radius)
 
@@ -442,6 +451,14 @@ func _touch_steps() -> int:
 		var off := absf(angle_difference(_player.yaw, atan2(input.x, input.y)))
 		steps *= clampf(1.0 - 0.5 * rad_to_deg(off) / turn_shorten_angle, 0.5, 1.0)
 	return maxi(roundi(steps), 1)
+
+
+## Stride length the player should use, as a share of normal: shorter at a
+## jog with the ball, normal at a sprint or without it.
+func stride_scale() -> float:
+	if not holding():
+		return 1.0
+	return lerpf(dribble_stride, 1.0, _player.sprint_weight)
 
 
 ## Scale on the player's acceleration: slower moving off while gripping the ball.

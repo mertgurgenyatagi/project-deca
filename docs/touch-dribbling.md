@@ -82,6 +82,12 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   So rapid taps slow the player, which tightens the grip, which makes changes near instant. A straight run keeps the loose run-and-catch rhythm.
   - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.68 m (`arrival_speed_ratio` 0.7), and moving off to 0.74 m (`touch_speed_margin` 1.0 m/s); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
   - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
+- **Quicker, shorter steps with the ball.** At a jog with the ball, strides are `dribble_stride` (75%) of the clips' own length at the same speed, so the legs turn over about 33% faster (1.43 → 1.91 strides/s), and touches come sooner.
+  - The shorter swing comes from mixing `1 − stride` of the idle pose into the gait (the Locomotion blend). With a strict 2 cm planted test, steady-jog foot slip is 0.23 m/s on average (0.07 without the ball).
+  - The planned contact point uses the toe mixed the same way.
+  - The sprint keeps its stride. `player.stride` eases in and out as the ball is taken or lost.
+  - **Effect:** at a steady jog the ball sits 0.49 m ahead at each touch and peaks at 0.55–0.61 m. Under rapid taps it averages 0.31–0.36 m from the hips.
+  - **Cost:** with the ball that close, feet overlap it more in stops and sharp turns. Random play has about 3.5% overlapping frames, against 2–3% before.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
 
 **Effect on the bench:**
@@ -132,8 +138,9 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
 | Dribble | `turn_shorten_angle` | 60° |
 | Dribble | `touch_phase_offset` | 0.03 cycles |
 | Dribble | `toe_tip` | 0.06 m |
-| Dribble | `touch_side_offset` | 0.04 m |
-| Dribble | `arrival_speed_ratio` | 0.7 (jog) |
+| Dribble | `touch_side_offset` | 0.08 m |
+| Dribble | `dribble_stride` | 0.75 |
+| Dribble | `arrival_speed_ratio` | 0.8 (jog) |
 | Dribble | `sprint_arrival_ratio` | 0.4 |
 | Dribble | `touch_speed_ratio` | 2.0 |
 | Dribble | `touch_speed_margin` | 1.0 m/s |
