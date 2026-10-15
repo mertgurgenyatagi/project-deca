@@ -82,12 +82,6 @@ enum Foot { LEFT, RIGHT }
 ## A held ball this close to the hips (m) counts as at the feet: a waiting
 ## change of direction can be made with a touch.
 @export var control_reach := 0.5
-## While a turn waits for the ball, the player drifts this far away from it
-## (degrees, at a 90° turn or more; less for smaller turns).
-@export var approach_angle := 12.0
-## While a stop waits for the ball, the player eases off to this share of speed.
-@export var stop_ease := 0.85
-
 const PREDICT_STEP := 1.0 / 60.0
 const PREDICT_HORIZON := 2.5
 ## Below this predicted speed (m/s) at the next touch, the ball is brought to rest instead.
@@ -189,19 +183,9 @@ func gate_input(raw: Vector2) -> Vector2:
 		_effective_input = raw
 		return raw
 	_effective_input = _latched_input
-	if _direction_pending() and _player.action == Player.Action.NONE:
-		if _latched_input == Vector2.ZERO:
-			var to_ball := _ground(ball.position) - _hips()
-			_effective_input = Vector2.ZERO if to_ball.length() <= control_reach else to_ball.normalized()
-		elif raw == Vector2.ZERO:
-			# A stop is coming: ease off a little on the way to the ball.
-			_effective_input = _latched_input * stop_ease
-		else:
-			# A turn is coming: drift slightly away from it, so the foot meets
-			# the ball from the far side, shaping to take it round into the turn.
-			var turn := _player.turn_for(raw)
-			var share := clampf(absf(turn) / (PI * 0.5), 0.0, 1.0)
-			_effective_input = _latched_input.rotated(signf(turn) * deg_to_rad(approach_angle) * share)
+	if _direction_pending() and _player.action == Player.Action.NONE and _latched_input == Vector2.ZERO:
+		var to_ball := _ground(ball.position) - _hips()
+		_effective_input = Vector2.ZERO if to_ball.length() <= control_reach else to_ball.normalized()
 	return _effective_input
 
 

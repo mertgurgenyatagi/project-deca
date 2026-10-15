@@ -1,6 +1,6 @@
 class_name IntentLean
 extends SkeletonModifier3D
-## The faintest body hint of what the player is about to do while that change
+## A clear body hint of what the player is about to do while that change
 ## waits for a foot to reach the ball: the shoulders and head start to turn
 ## toward a new direction (leaning slightly into it), the body leans back for
 ## a stop, forward for a sprint, and settles slightly back on easing off.
@@ -10,17 +10,17 @@ extends SkeletonModifier3D
 ## once the touch makes the change for real.
 
 ## Torso twist toward a new direction (degrees), reached at a 90° turn or more.
-@export var turn_twist := 10.0
+@export var turn_twist := 25.0
 ## Extra twist of the head on top of the torso (degrees).
-@export var head_twist := 8.0
+@export var head_twist := 15.0
 ## Sideways lean into the turn (degrees).
-@export var turn_lean := 2.5
+@export var turn_lean := 7.0
 ## Lean back when a stop is waiting (degrees).
-@export var stop_lean := 4.0
+@export var stop_lean := 10.0
 ## Lean forward when a sprint is waiting (degrees).
-@export var sprint_lean := 4.0
+@export var sprint_lean := 10.0
 ## Lean back when easing off a sprint is waiting (degrees).
-@export var ease_lean := 2.0
+@export var ease_lean := 5.0
 ## How quickly the hint follows the intent (higher = snappier).
 @export var sharpness := 10.0
 

@@ -62,11 +62,10 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   - **Turnback:** the ball is set down beside where the player will stop (§3.4).
   - **Standing pivot past 100°:** the ball is taken round to the side the body turns toward, not through the feet.
   - **Stop:** the ball is rolled to `rest_distance` in front of where the player will stop.
-- **The path shows what's coming.** While a turn waits, the player drifts slightly *away* from it: up to `approach_angle` (12°) at a 90°+ turn, less for smaller turns, and away from the turning side for a turnback. So the foot meets the ball from the far side, shaping to take it round into the turn. While a stop waits, the player eases off to `stop_ease` (85%) of their speed. The ball's prediction uses this adjusted path.
-- **A hint of what's coming (`intent_lean.gd`).** While a change waits, an `IntentLean` modifier on the skeleton gives the faintest body cue:
-  - **turn:** the shoulders and head start to turn toward the new direction (torso up to 10°, head up to 8° more), with a 2.5° lean into the turn
-  - **stop:** a 4° lean back
-  - **sprint:** a 4° lean forward, and a 2° lean back when easing off
+- **A hint of what's coming (`intent_lean.gd`).** While a change waits, an `IntentLean` modifier on the skeleton gives a clear body cue. The player's path doesn't change: a drift on the approach was tried and looked wrong.
+  - **turn:** the shoulders and head turn toward the new direction (torso up to 25°, head up to 15° more), with a 7° lean into the turn
+  - **stop:** a 10° lean back
+  - **sprint:** a 10° lean forward, and a 5° lean back when easing off
   - It's applied after the animation, to the spine, neck and head only, so the feet are untouched. It eases in and out, and its exports set the angles and the easing.
   - It reads `Dribble.intent_turn()`, `intent_stop()` and `intent_sprint()`. It hasn't been tested yet.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
