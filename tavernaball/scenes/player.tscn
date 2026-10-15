@@ -1,0 +1,231 @@
+[gd_scene format=3 uid="uid://ba38pdxleuyvx"]
+
+[ext_resource type="Script" uid="uid://bck5huem5o5yt" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="PackedScene" uid="uid://c7mmskntnwytk" path="res://assets/characters/player/character.fbx" id="2_character"]
+[ext_resource type="AnimationLibrary" uid="uid://hodir3wobmrh" path="res://assets/animations/locomotion/idle.fbx" id="3_idle"]
+[ext_resource type="AnimationLibrary" uid="uid://b4yy7vbayduij" path="res://assets/animations/locomotion/jog_forward.fbx" id="4_jog"]
+[ext_resource type="AnimationLibrary" uid="uid://f8yri3urddyb" path="res://assets/animations/turns/turn_180.fbx" id="5_turn"]
+[ext_resource type="AnimationLibrary" uid="uid://dfeyiy7dsi88i" path="res://assets/animations/locomotion/sprint.fbx" id="6_sprint"]
+[ext_resource type="AnimationLibrary" uid="uid://caiy2nelwjofd" path="res://assets/animations/starts/sprint_start.fbx" id="8_start"]
+[ext_resource type="Script" uid="uid://bky2rt0qexna8" path="res://scripts/dribble.gd" id="9_dribble"]
+[ext_resource type="Script" uid="uid://dt7ui7ocafc6c" path="res://scripts/intent_lean.gd" id="10_lean"]
+[ext_resource type="AnimationLibrary" uid="uid://rrciex1lby33" path="res://assets/animations/kicks/pass_kick.fbx" id="11_kick"]
+[ext_resource type="Script" uid="uid://chjvq2nqk0u02" path="res://scripts/passing.gd" id="12_passing"]
+[ext_resource type="AudioStream" uid="uid://c6nxy6vyymeur" path="res://assets/sfx/pass_1.ogg" id="13_sfx1"]
+[ext_resource type="AudioStream" uid="uid://btpli0srh7lc8" path="res://assets/sfx/pass_2.ogg" id="14_sfx2"]
+[ext_resource type="AudioStream" uid="uid://nanp3ep3cpoe" path="res://assets/sfx/pass_3.ogg" id="15_sfx3"]
+[ext_resource type="AudioStream" uid="uid://drqfbmvr1uc2o" path="res://assets/sfx/pass_4.ogg" id="16_sfx4"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1.8
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_gait"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_idle"]
+animation = &"idle/idle"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_idle"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jog"]
+animation = &"jog_forward/jog_forward"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_jog"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_jog"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kick"]
+animation = &"pass_kick/pass_kick"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_kick"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kick"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kick_l"]
+animation = &"pass_kick/pass_kick_mirror"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_kick_l"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kick_l"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_kick_l"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kick_leg"]
+animation = &"pass_kick/pass_kick"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_kick_leg"]
+filter_enabled = true
+filters = ["Skeleton3D:mixamorig_RightFoot", "Skeleton3D:mixamorig_RightLeg", "Skeleton3D:mixamorig_RightToeBase", "Skeleton3D:mixamorig_RightToe_End", "Skeleton3D:mixamorig_RightUpLeg"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kick_leg"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kick_leg_l"]
+animation = &"pass_kick/pass_kick_mirror"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_kick_leg_l"]
+filter_enabled = true
+filters = ["Skeleton3D:mixamorig_LeftFoot", "Skeleton3D:mixamorig_LeftLeg", "Skeleton3D:mixamorig_LeftToeBase", "Skeleton3D:mixamorig_LeftToe_End", "Skeleton3D:mixamorig_LeftUpLeg"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kick_leg_l"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_kick_leg_l"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_kick_leg"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_kick"]
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_locomotion"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_sprint"]
+animation = &"sprint/sprint"
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_sprint"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_sprint"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_start"]
+animation = &"sprint_start/sprint_start"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_start"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_start"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_start"]
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn"]
+animation = &"turn_180/turn_180"
+
+[sub_resource type="AnimationNodeBlend2" id="AnimationNodeBlend2_turn"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_turn"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="AnimationNodeTimeSeek_turn"]
+
+[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_root"]
+nodes/output/position = Vector2(1260, 540)
+nodes/Idle/node = SubResource("AnimationNodeAnimation_idle")
+nodes/Idle/position = Vector2(-400, -120)
+nodes/IdleRate/node = SubResource("AnimationNodeTimeScale_idle")
+nodes/IdleRate/position = Vector2(-200, -120)
+nodes/Jog/node = SubResource("AnimationNodeAnimation_jog")
+nodes/Jog/position = Vector2(-640, 0)
+nodes/JogFreeze/node = SubResource("AnimationNodeTimeScale_jog")
+nodes/JogFreeze/position = Vector2(-440, 0)
+nodes/JogSeek/node = SubResource("AnimationNodeTimeSeek_jog")
+nodes/JogSeek/position = Vector2(-240, 0)
+nodes/Sprint/node = SubResource("AnimationNodeAnimation_sprint")
+nodes/Sprint/position = Vector2(-640, 140)
+nodes/SprintFreeze/node = SubResource("AnimationNodeTimeScale_sprint")
+nodes/SprintFreeze/position = Vector2(-440, 140)
+nodes/SprintSeek/node = SubResource("AnimationNodeTimeSeek_sprint")
+nodes/SprintSeek/position = Vector2(-240, 140)
+nodes/Gait/node = SubResource("AnimationNodeBlend2_gait")
+nodes/Gait/position = Vector2(-40, 60)
+nodes/Locomotion/node = SubResource("AnimationNodeBlend2_locomotion")
+nodes/Locomotion/position = Vector2(160, 0)
+nodes/Turn/node = SubResource("AnimationNodeAnimation_turn")
+nodes/Turn/position = Vector2(-640, 300)
+nodes/TurnFreeze/node = SubResource("AnimationNodeTimeScale_turn")
+nodes/TurnFreeze/position = Vector2(-440, 300)
+nodes/TurnSeek/node = SubResource("AnimationNodeTimeSeek_turn")
+nodes/TurnSeek/position = Vector2(-240, 300)
+nodes/TurnBlend/node = SubResource("AnimationNodeBlend2_turn")
+nodes/TurnBlend/position = Vector2(360, 120)
+nodes/Start/node = SubResource("AnimationNodeAnimation_start")
+nodes/Start/position = Vector2(-640, 580)
+nodes/StartFreeze/node = SubResource("AnimationNodeTimeScale_start")
+nodes/StartFreeze/position = Vector2(-440, 580)
+nodes/StartSeek/node = SubResource("AnimationNodeTimeSeek_start")
+nodes/StartSeek/position = Vector2(-240, 580)
+nodes/StartBlend/node = SubResource("AnimationNodeBlend2_start")
+nodes/StartBlend/position = Vector2(760, 360)
+nodes/Kick/node = SubResource("AnimationNodeAnimation_kick")
+nodes/Kick/position = Vector2(-640, 760)
+nodes/KickFreeze/node = SubResource("AnimationNodeTimeScale_kick")
+nodes/KickFreeze/position = Vector2(-440, 760)
+nodes/KickSeek/node = SubResource("AnimationNodeTimeSeek_kick")
+nodes/KickSeek/position = Vector2(-240, 760)
+nodes/KickLeg/node = SubResource("AnimationNodeAnimation_kick_leg")
+nodes/KickLeg/position = Vector2(-640, 900)
+nodes/KickLegFreeze/node = SubResource("AnimationNodeTimeScale_kick_leg")
+nodes/KickLegFreeze/position = Vector2(-440, 900)
+nodes/KickLegSeek/node = SubResource("AnimationNodeTimeSeek_kick_leg")
+nodes/KickLegSeek/position = Vector2(-240, 900)
+nodes/KickLegBlend/node = SubResource("AnimationNodeBlend2_kick_leg")
+nodes/KickLegBlend/position = Vector2(860, 420)
+nodes/KickL/node = SubResource("AnimationNodeAnimation_kick_l")
+nodes/KickL/position = Vector2(-640, 1040)
+nodes/KickLFreeze/node = SubResource("AnimationNodeTimeScale_kick_l")
+nodes/KickLFreeze/position = Vector2(-440, 1040)
+nodes/KickLSeek/node = SubResource("AnimationNodeTimeSeek_kick_l")
+nodes/KickLSeek/position = Vector2(-240, 1040)
+nodes/KickLBlend/node = SubResource("AnimationNodeBlend2_kick_l")
+nodes/KickLBlend/position = Vector2(1060, 540)
+nodes/KickLegL/node = SubResource("AnimationNodeAnimation_kick_leg_l")
+nodes/KickLegL/position = Vector2(-640, 1180)
+nodes/KickLegLFreeze/node = SubResource("AnimationNodeTimeScale_kick_leg_l")
+nodes/KickLegLFreeze/position = Vector2(-440, 1180)
+nodes/KickLegLSeek/node = SubResource("AnimationNodeTimeSeek_kick_leg_l")
+nodes/KickLegLSeek/position = Vector2(-240, 1180)
+nodes/KickLegLBlend/node = SubResource("AnimationNodeBlend2_kick_leg_l")
+nodes/KickLegLBlend/position = Vector2(900, 460)
+nodes/KickBlend/node = SubResource("AnimationNodeBlend2_kick")
+nodes/KickBlend/position = Vector2(960, 480)
+node_connections = [&"output", 0, &"KickLBlend", &"IdleRate", 0, &"Idle", &"JogFreeze", 0, &"Jog", &"JogSeek", 0, &"JogFreeze", &"SprintFreeze", 0, &"Sprint", &"SprintSeek", 0, &"SprintFreeze", &"Gait", 0, &"JogSeek", &"Gait", 1, &"SprintSeek", &"Locomotion", 0, &"IdleRate", &"Locomotion", 1, &"Gait", &"TurnFreeze", 0, &"Turn", &"TurnSeek", 0, &"TurnFreeze", &"TurnBlend", 0, &"Locomotion", &"TurnBlend", 1, &"TurnSeek", &"StartFreeze", 0, &"Start", &"StartSeek", 0, &"StartFreeze", &"StartBlend", 0, &"TurnBlend", &"StartBlend", 1, &"StartSeek", &"KickFreeze", 0, &"Kick", &"KickSeek", 0, &"KickFreeze", &"KickLegFreeze", 0, &"KickLeg", &"KickLegSeek", 0, &"KickLegFreeze", &"KickLegBlend", 0, &"StartBlend", &"KickLegBlend", 1, &"KickLegSeek", &"KickLFreeze", 0, &"KickL", &"KickLSeek", 0, &"KickLFreeze", &"KickLBlend", 0, &"KickBlend", &"KickLBlend", 1, &"KickLSeek", &"KickLegLFreeze", 0, &"KickLegL", &"KickLegLSeek", 0, &"KickLegLFreeze", &"KickLegLBlend", 0, &"KickLegBlend", &"KickLegLBlend", 1, &"KickLegLSeek", &"KickBlend", 0, &"KickLegLBlend", &"KickBlend", 1, &"KickSeek"]
+
+[node name="Player" type="CharacterBody3D" unique_id=514345153]
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=108594485]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="." unique_id=716405344]
+
+[node name="Character" parent="Model" unique_id=1203215737 instance=ExtResource("2_character")]
+
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=39573518]
+root_node = NodePath("../Model/Character")
+libraries/idle = ExtResource("3_idle")
+libraries/jog_forward = ExtResource("4_jog")
+libraries/pass_kick = ExtResource("11_kick")
+libraries/sprint = ExtResource("6_sprint")
+libraries/sprint_start = ExtResource("8_start")
+libraries/turn_180 = ExtResource("5_turn")
+tree_root = SubResource("AnimationNodeBlendTree_root")
+parameters/IdleRate/scale = 1.2
+parameters/JogFreeze/scale = 0.0
+parameters/JogSeek/seek_request = -1.0
+parameters/SprintFreeze/scale = 0.0
+parameters/SprintSeek/seek_request = -1.0
+parameters/Gait/blend_amount = 0.0
+parameters/Locomotion/blend_amount = 0.0
+parameters/TurnFreeze/scale = 0.0
+parameters/TurnSeek/seek_request = -1.0
+parameters/TurnBlend/blend_amount = 0.0
+parameters/StartFreeze/scale = 0.0
+parameters/StartSeek/seek_request = -1.0
+parameters/StartBlend/blend_amount = 0.0
+parameters/KickFreeze/scale = 0.0
+parameters/KickSeek/seek_request = -1.0
+parameters/KickLegFreeze/scale = 0.0
+parameters/KickLegSeek/seek_request = -1.0
+parameters/KickLegBlend/blend_amount = 0.0
+parameters/KickLFreeze/scale = 0.0
+parameters/KickLSeek/seek_request = -1.0
+parameters/KickLBlend/blend_amount = 0.0
+parameters/KickLegLFreeze/scale = 0.0
+parameters/KickLegLSeek/seek_request = -1.0
+parameters/KickLegLBlend/blend_amount = 0.0
+parameters/KickBlend/blend_amount = 0.0
+
+[node name="Dribble" type="Node" parent="." unique_id=209449642]
+script = ExtResource("9_dribble")
+
+[node name="Passing" type="Node" parent="." unique_id=1541517836]
+script = ExtResource("12_passing")
+pace_constant = 0.17
+sounds = Array[AudioStream]([ExtResource("13_sfx1"), ExtResource("14_sfx2"), ExtResource("15_sfx3"), ExtResource("16_sfx4")])
+
+[node name="IntentLean" type="SkeletonModifier3D" parent="Model/Character/Skeleton3D"]
+script = ExtResource("10_lean")

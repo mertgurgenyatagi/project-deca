@@ -8,3 +8,11 @@ Godot_v*.exe
 # OS
 .DS_Store
 Thumbs.db
+
+# Raw Mixamo downloads (the project uses copies under tavernaball/assets/)
+/character.fbx
+/Sprint.fbx
+/Idle To Sprint.fbx
+/Running To Turn.fbx
+/Walking Turn 180 (1).fbx
+/soccer_animations/
