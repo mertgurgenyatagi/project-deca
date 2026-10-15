@@ -81,9 +81,21 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
 
   4. **Grip means nimble.** At full grip, turn rate and turn settling are `grip_turn_boost` (2×) faster. Reversals below `grip_turnback_speed` (2 m/s) are quick pivots, not full turnbacks (brake, turn clip, push off).
 
-  So rapid taps slow the player, which tightens the grip, which makes changes near instant and turns quick. A straight run keeps the loose run-and-catch rhythm.
+  5. **Grip means cutting, not skating.** At full grip:
+     - turns settle `grip_turn_snap` (3×) more sharply, finishing crisply instead of gliding
+     - travel jumps `grip_cut` (50%) of the way to the new direction at once, so the player cuts rather than carves
+     - the body pivots about the planted (lower) toe rather than its own centre (`grip_pivot`), with the turn-driven leg stepping switched off, so the stance foot holds while the hips swing round it
+     - feet meeting the ball clear it at about the player's pace, not the speed of a swinging foot
+     - the ball may steer `grip_bend_boost` (2×) harder
+
+  So rapid taps slow the player, which tightens the grip, which makes changes near instant and turns quick and planted. A straight run keeps the loose run-and-catch rhythm.
   - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.68 m (`arrival_speed_ratio` 0.7), and moving off to 0.74 m (`touch_speed_margin` 1.0 m/s); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
   - **How fast the body turns** (bench `rapid taps`, time until facing within 15° of the new direction): median 0.19–0.21 s before rule 4, and 0.15–0.18 s with it. The share done within 0.15 s rose from 23–26% to 36–48%. A 2.5× boost turns faster still (median 0.12–0.15 s), but the body then outpaces the ball, which swings out to 1.1–1.4 m.
+  - **With rule 5** (rapid taps):
+    - facing the new way: median 0.12–0.17 s
+    - ball: within 0.68–0.84 m of the hips (it was up to 1.5 m with faster turning alone), averaging 0.37 m
+    - planted-foot slip during the taps: 1.3–1.4 m/s, down from 1.8–2.1. It's still well above the 0.23 m/s of a steady jog. A pivot is still built from jog legs, and a proper cut or turn clip, or foot-locking IK, would be the real fix.
+    - **Cost:** more foot–ball overlap. Random play has about 5.5% overlapping frames (3.5% before), mostly in turnbacks and pivots.
   - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
 - **Quicker, shorter steps with the ball.** At a jog with the ball, strides are `dribble_stride` (75%) of the clips' own length at the same speed, so the legs turn over about 33% faster (1.43 → 1.91 strides/s), and touches come sooner.
   - The shorter swing comes from mixing `1 − stride` of the idle pose into the gait (the Locomotion blend). With a strict 2 cm planted test, steady-jog foot slip is 0.23 m/s on average (0.07 without the ball).

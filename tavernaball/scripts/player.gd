@@ -327,6 +327,9 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = _ground.x
 	velocity.z = _ground.y
+	var pivot := _pivot_offset(previous_yaw, _yaw)
+	velocity.x += pivot.x / delta
+	velocity.z += pivot.y / delta
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 	move_and_slide()
@@ -337,6 +340,26 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_update_animation(delta)
+
+
+## With the ball at the feet, quick turns pivot about the planted foot rather
+## than the body's centre: the body shifts so that foot stays where it is, as
+## in a real plant-and-turn, instead of being dragged round (skating).
+## Returns the ground shift (x: world X, y: world Z) for this tick.
+func _pivot_offset(from_yaw: float, to_yaw: float) -> Vector2:
+	if _dribble == null or from_yaw == to_yaw:
+		return Vector2.ZERO
+	var weight := _dribble.pivot_share()
+	if weight <= 0.0:
+		return Vector2.ZERO
+	# The planted foot: the lower toe.
+	var left := _skeleton.get_bone_global_pose(_skeleton.find_bone(LEG_CHAINS[0][3])).origin
+	var right := _skeleton.get_bone_global_pose(_skeleton.find_bone(LEG_CHAINS[1][3])).origin
+	var foot := left if left.y < right.y else right
+	foot.y = 0.0
+	var before := Basis(Vector3.UP, from_yaw) * foot
+	var after := Basis(Vector3.UP, to_yaw) * foot
+	return Vector2(before.x - after.x, before.z - after.z) * weight
 
 
 func _end_action() -> void:
@@ -476,9 +499,17 @@ func _step_steering(input: Vector2, delta: float) -> void:
 	var speed := _ground.length()
 	var target_yaw := atan2(input.x, input.y)
 	var max_step := turn_rate_at(speed) * delta
-	var sharpness := turn_sharpness * (_dribble.turn_scale() if _dribble else 1.0)
+	var sharpness := turn_sharpness
+	if _dribble:
+		# With the ball at the feet, turns snap round rather than glide.
+		sharpness *= _dribble.turn_scale() * _dribble.turn_snap()
 	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-sharpness * delta))
 	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
+	# Travel follows the facing, except that with the ball at the feet it cuts
+	# part of the way to the new direction at once while the body catches up.
+	var travel_yaw := _yaw
+	if _dribble:
+		travel_yaw += _turn_toward(_yaw, target_yaw) * _dribble.cut_share()
 
 	var target_speed := 0.0
 	if absf(angle_difference(_yaw, target_yaw)) < deg_to_rad(go_angle):
@@ -488,7 +519,7 @@ func _step_steering(input: Vector2, delta: float) -> void:
 		# Easing off a sprint into a jog is gentler than stopping.
 		rate = sprint_slowdown if target_speed > 0.0 else deceleration
 	speed = move_toward(speed, target_speed, rate * delta)
-	_ground = Vector2(sin(_yaw), cos(_yaw)) * speed
+	_ground = Vector2(sin(travel_yaw), cos(travel_yaw)) * speed
 
 
 ## Steering turn rate (rad/s) at a ground speed: pivot rate standing, run
@@ -699,7 +730,11 @@ func _bone_rotation(anim: Animation, bone_name: String, time: float) -> Quaterni
 func _update_animation(delta: float) -> void:
 	var weight := 1.0 - exp(-blend_sharpness * delta)
 	_stride = lerpf(_stride, _dribble.stride_scale() if _dribble else 1.0, weight)
-	_turn_motion = lerpf(_turn_motion, _yaw_rate * turn_step_radius, weight)
+	# Turning makes the legs step (so pivots don't freeze them), except while
+	# pivoting about a planted foot: then that foot holds and the body swings
+	# round it, and stepping on the spot would only make the feet skate.
+	var stepping := 1.0 - (_dribble.pivot_share() if _dribble else 0.0)
+	_turn_motion = lerpf(_turn_motion, _yaw_rate * turn_step_radius * stepping, weight)
 	var real := get_real_velocity()
 	var ground_speed := Vector2(real.x, real.z).length()
 	var speed := maxf(ground_speed, _turn_motion)

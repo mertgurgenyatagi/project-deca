@@ -78,6 +78,9 @@ func _taps(offset: float) -> Dictionary:
 	var facings := []
 	var dist_sum := 0.0
 	var dist_n := 0
+	var slip_sum := 0.0
+	var slip_n := 0
+	var last_toes := {}
 	var current := RIGHT
 	while t < 12.0:
 		var next := current
@@ -96,6 +99,12 @@ func _taps(offset: float) -> Dictionary:
 				waited = h
 			if faced < 0.0 and absf(angle_difference(player.yaw, atan2(current.x, current.y))) < deg_to_rad(15.0):
 				faced = h
+			for f in feet:
+				var toe: Vector3 = skel.global_transform * skel.get_bone_global_pose(f[1]).origin
+				if last_toes.has(f[1]) and toe.y < 0.02 and last_toes[f[1]].y < 0.02:
+					slip_sum += Vector2(toe.x - last_toes[f[1]].x, toe.z - last_toes[f[1]].z).length() / TICK
+					slip_n += 1
+				last_toes[f[1]] = toe
 			var rel := Vector2(ball.position.x - player.global_position.x, ball.position.z - player.global_position.z)
 			dist_sum += rel.length()
 			dist_n += 1
@@ -106,7 +115,7 @@ func _taps(offset: float) -> Dictionary:
 	waits.sort()
 	facings.sort()
 	var facing_done := facings.filter(func(f): return f < 0.149).size() * 100 / facings.size()
-	print("   taps offset %.2f: change wait median %.2f s, 90%% %.2f s; facing new way median %.2f s (%d%% within 0.15 s); ball from hips avg %.2f m, max %.2f m" % [offset, waits[waits.size() / 2], waits[int(waits.size() * 0.9)], facings[facings.size() / 2], facing_done, dist_sum / dist_n, r.far])
+	print("   taps offset %.2f: change wait median %.2f s, 90%% %.2f s; facing new way median %.2f s (%d%% within 0.15 s); ball from hips avg %.2f m, max %.2f m; planted slip %.2f m/s" % [offset, waits[waits.size() / 2], waits[int(waits.size() * 0.9)], facings[facings.size() / 2], facing_done, dist_sum / dist_n, r.far, slip_sum / maxf(slip_n, 1)])
 	return r
 
 

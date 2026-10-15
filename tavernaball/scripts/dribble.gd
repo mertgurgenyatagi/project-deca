@@ -68,9 +68,20 @@ enum Foot { LEFT, RIGHT }
 ## At full grip the ball still counts as at the feet this far from the hips
 ## (m), so a waiting change is made at once (`control_reach` with no grip).
 @export var grip_control_reach := 0.75
-## With the ball at the feet the player is nimble: turn rate and how sharply
-## turns settle are multiplied by this at full grip.
+## With the ball at the feet the player is nimble: turn rate is multiplied by
+## this at full grip...
 @export var grip_turn_boost := 2.0
+## ...turns settle this many times more sharply (a crisp finish, not a glide)...
+@export var grip_turn_snap := 3.0
+## ...and the direction of travel jumps this share of the way to the new
+## direction at once, while the body catches up: a cut, not a carve.
+@export var grip_cut := 0.5
+## At full grip, turns pivot about the planted foot by this share (1 = the
+## foot stays exactly put as the body turns; 0 = turn about the body's centre).
+@export var grip_pivot := 1.0
+## At full grip the ball may steer this many times harder between touches,
+## so it keeps up with quick cuts.
+@export var grip_bend_boost := 2.0
 ## With the ball at the feet, reversing below this speed (m/s, at full grip)
 ## is a quick pivot rather than a full turnback (brake, turn, push off).
 @export var grip_turnback_speed := 2.0
@@ -389,8 +400,10 @@ func _sim_step(s: Sim, dt: float) -> void:
 			else:
 				var target_yaw := atan2(input.x, input.y)
 				var max_step := p.turn_rate_at(speed) * dt
-				var step := angle_difference(s.yaw, target_yaw) * (1.0 - exp(-p.turn_sharpness * dt))
+				var sharp := p.turn_sharpness * turn_scale() * turn_snap()
+				var step := angle_difference(s.yaw, target_yaw) * (1.0 - exp(-sharp * dt))
 				s.yaw = wrapf(s.yaw + clampf(step, -max_step, max_step), -PI, PI)
+				var travel_yaw := s.yaw + angle_difference(s.yaw, target_yaw) * cut_share()
 				var target_speed := 0.0
 				if absf(angle_difference(s.yaw, target_yaw)) < deg_to_rad(p.go_angle):
 					target_speed = top * input.length()
@@ -398,6 +411,11 @@ func _sim_step(s: Sim, dt: float) -> void:
 				if target_speed < speed:
 					rate = p.sprint_slowdown if target_speed > 0.0 else p.deceleration
 				speed = move_toward(speed, target_speed, rate * dt)
+				s.velocity = Vector2(sin(travel_yaw), cos(travel_yaw)) * speed
+				s.position += s.velocity * dt
+				s.phase += p.phase_rate_at(speed) * dt
+				s.time += dt
+				return
 			s.velocity = Vector2(sin(s.yaw), cos(s.yaw)) * speed
 	s.position += s.velocity * dt
 	s.phase += p.phase_rate_at(speed) * dt
@@ -465,6 +483,28 @@ func stride_scale() -> float:
 	if not holding():
 		return 1.0
 	return lerpf(dribble_stride, 1.0, _player.sprint_weight)
+
+
+## Multiplier on how sharply turns settle: crisper with the ball at the feet.
+func turn_snap() -> float:
+	if not holding():
+		return 1.0
+	return lerpf(1.0, grip_turn_snap, _grip())
+
+
+## How fully turns pivot about the planted foot (0-1): with the ball at the feet.
+func pivot_share() -> float:
+	if not holding():
+		return 0.0
+	return grip_pivot * _grip()
+
+
+## Share of the way the direction of travel jumps toward a new direction at
+## once (a cut), with the ball at the feet.
+func cut_share() -> float:
+	if not holding():
+		return 0.0
+	return grip_cut * _grip()
 
 
 ## Speed above which a reversal is a turnback: higher with the ball at the
@@ -644,7 +684,10 @@ func _touch(kind: String, contact := {}) -> void:
 	if not contact.is_empty():
 		# The foot pushes the ball away from itself, faster than the foot moves.
 		var normal: Vector3 = contact.normal
-		var least: float = contact.speed + CONTACT_PUSH
+		# With the ball at the feet, a foot meeting it controls it: it clears
+		# it at about the player's pace, not the full speed of a swinging foot.
+		var controlled := minf(contact.speed, _player.ground_velocity.length() * 1.2)
+		var least: float = lerpf(contact.speed, controlled, _grip()) + CONTACT_PUSH
 		var away := launch.dot(normal)
 		if away < least:
 			launch += normal * (least - away)
@@ -656,7 +699,7 @@ func _touch(kind: String, contact := {}) -> void:
 	accel.y = 0.0
 	var along := launch.normalized()
 	_planned_accel = along * minf(accel.dot(along), 0.0)
-	_bend_cap = max_bend
+	_bend_cap = max_bend * lerpf(1.0, grip_bend_boost, _grip())
 	_clamped = false
 	_since_touch = 0.0
 	touch_log.append({"time": _clock, "kind": kind, "foot": _next_foot, "error": error})
