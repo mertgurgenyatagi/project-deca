@@ -348,7 +348,7 @@ func _end_action() -> void:
 
 func _should_turn_back(input: Vector2) -> bool:
 	return input != Vector2.ZERO \
-			and _ground.length() > turnback_min_speed \
+			and _ground.length() > turnback_threshold() \
 			and absf(_ground.angle_to(input)) >= deg_to_rad(turnback_angle)
 
 
@@ -476,7 +476,8 @@ func _step_steering(input: Vector2, delta: float) -> void:
 	var speed := _ground.length()
 	var target_yaw := atan2(input.x, input.y)
 	var max_step := turn_rate_at(speed) * delta
-	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-turn_sharpness * delta))
+	var sharpness := turn_sharpness * (_dribble.turn_scale() if _dribble else 1.0)
+	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-sharpness * delta))
 	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
 
 	var target_speed := 0.0
@@ -496,6 +497,9 @@ func turn_rate_at(speed: float) -> float:
 	var turn_speed := lerpf(pivot_turn_speed, run_turn_speed, clampf(speed / move_speed, 0.0, 1.0))
 	if speed > move_speed:
 		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
+	if _dribble:
+		# Nimbler with the ball at the feet.
+		turn_speed *= _dribble.turn_scale()
 	return deg_to_rad(turn_speed)
 
 
@@ -504,6 +508,12 @@ func turn_rate_at(speed: float) -> float:
 func scale_speed(factor: float) -> void:
 	if _action == Action.NONE:
 		_ground *= clampf(factor, 0.0, 1.0)
+
+
+## Speed above which reversing is a turnback rather than a pivot (higher
+## with the ball at the feet).
+func turnback_threshold() -> float:
+	return _dribble.turnback_speed(turnback_min_speed) if _dribble else turnback_min_speed
 
 
 ## Whether this input, applied now, would start a turnback.

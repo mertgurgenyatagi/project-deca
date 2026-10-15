@@ -75,6 +75,7 @@ func _taps(offset: float) -> Dictionary:
 	rng.seed = 99 + int(offset * 100.0)
 	var t := 0.0
 	var waits := []
+	var facings := []
 	var dist_sum := 0.0
 	var dist_n := 0
 	var current := RIGHT
@@ -86,20 +87,26 @@ func _taps(offset: float) -> Dictionary:
 		var hold := rng.randf_range(0.15, 0.35)
 		player.move_input = current
 		var waited := -1.0
+		var faced := -1.0
 		var h := 0.0
 		while h < hold:
 			await physics_frame
 			h += TICK
 			if waited < 0.0 and not dribble._direction_pending():
 				waited = h
+			if faced < 0.0 and absf(angle_difference(player.yaw, atan2(current.x, current.y))) < deg_to_rad(15.0):
+				faced = h
 			var rel := Vector2(ball.position.x - player.global_position.x, ball.position.z - player.global_position.z)
 			dist_sum += rel.length()
 			dist_n += 1
 			r.far = maxf(r.far, rel.length())
 		waits.append(waited if waited >= 0.0 else hold)
+		facings.append(faced if faced >= 0.0 else hold)
 		t += hold
 	waits.sort()
-	print("   taps offset %.2f: change wait median %.2f s, 90%% %.2f s; ball from hips avg %.2f m, max %.2f m; speed now %.2f" % [offset, waits[waits.size() / 2], waits[int(waits.size() * 0.9)], dist_sum / dist_n, r.far, player.ground_velocity.length()])
+	facings.sort()
+	var facing_done := facings.filter(func(f): return f < 0.149).size() * 100 / facings.size()
+	print("   taps offset %.2f: change wait median %.2f s, 90%% %.2f s; facing new way median %.2f s (%d%% within 0.15 s); ball from hips avg %.2f m, max %.2f m" % [offset, waits[waits.size() / 2], waits[int(waits.size() * 0.9)], facings[facings.size() / 2], facing_done, dist_sum / dist_n, r.far])
 	return r
 
 

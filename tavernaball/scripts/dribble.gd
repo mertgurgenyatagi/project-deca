@@ -68,6 +68,12 @@ enum Foot { LEFT, RIGHT }
 ## At full grip the ball still counts as at the feet this far from the hips
 ## (m), so a waiting change is made at once (`control_reach` with no grip).
 @export var grip_control_reach := 0.75
+## With the ball at the feet the player is nimble: turn rate and how sharply
+## turns settle are multiplied by this at full grip.
+@export var grip_turn_boost := 2.0
+## With the ball at the feet, reversing below this speed (m/s, at full grip)
+## is a quick pivot rather than a full turnback (brake, turn, push off).
+@export var grip_turnback_speed := 2.0
 ## A touch that takes the ball round a corner costs the player this share of
 ## their speed at a 180° change (proportionally less for smaller ones).
 @export var redirect_slowdown := 0.5
@@ -461,6 +467,21 @@ func stride_scale() -> float:
 	return lerpf(dribble_stride, 1.0, _player.sprint_weight)
 
 
+## Speed above which a reversal is a turnback: higher with the ball at the
+## feet, so quick reversals there are pivots.
+func turnback_speed(base: float) -> float:
+	if not holding():
+		return base
+	return lerpf(base, maxf(base, grip_turnback_speed), _grip())
+
+
+## Scale on the player's turning: quicker while the ball is at the feet.
+func turn_scale() -> float:
+	if not holding():
+		return 1.0
+	return lerpf(1.0, grip_turn_boost, _grip())
+
+
 ## Scale on the player's acceleration: slower moving off while gripping the ball.
 func acceleration_scale() -> float:
 	if not holding():
@@ -525,7 +546,7 @@ func _turnback_target() -> Array:
 func _pivoting() -> bool:
 	if _latched_input == Vector2.ZERO or _player.action != Player.Action.NONE:
 		return false
-	if _player.ground_velocity.length() > _player.turnback_min_speed:
+	if _player.ground_velocity.length() > _player.turnback_threshold():
 		return false
 	return absf(angle_difference(_player.yaw, atan2(_latched_input.x, _latched_input.y))) > deg_to_rad(100.0)
 

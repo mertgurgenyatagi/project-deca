@@ -79,8 +79,11 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   2. **Slow means grip:** closer, softer, more frequent touches (above).
   3. **Grip means control:** at full grip the ball counts as at the feet up to `grip_control_reach` (0.75 m) from the hips, against `control_reach` (0.5 m) with no grip, so a waiting change is made at once.
 
-  So rapid taps slow the player, which tightens the grip, which makes changes near instant. A straight run keeps the loose run-and-catch rhythm.
+  4. **Grip means nimble.** At full grip, turn rate and turn settling are `grip_turn_boost` (2×) faster. Reversals below `grip_turnback_speed` (2 m/s) are quick pivots, not full turnbacks (brake, turn clip, push off).
+
+  So rapid taps slow the player, which tightens the grip, which makes changes near instant and turns quick. A straight run keeps the loose run-and-catch rhythm.
   - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.68 m (`arrival_speed_ratio` 0.7), and moving off to 0.74 m (`touch_speed_margin` 1.0 m/s); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
+  - **How fast the body turns** (bench `rapid taps`, time until facing within 15° of the new direction): median 0.19–0.21 s before rule 4, and 0.15–0.18 s with it. The share done within 0.15 s rose from 23–26% to 36–48%. A 2.5× boost turns faster still (median 0.12–0.15 s), but the body then outpaces the ball, which swings out to 1.1–1.4 m.
   - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
 - **Quicker, shorter steps with the ball.** At a jog with the ball, strides are `dribble_stride` (75%) of the clips' own length at the same speed, so the legs turn over about 33% faster (1.43 → 1.91 strides/s), and touches come sooner.
   - The shorter swing comes from mixing `1 − stride` of the idle pose into the gait (the Locomotion blend). With a strict 2 cm planted test, steady-jog foot slip is 0.23 m/s on average (0.07 without the ball).
