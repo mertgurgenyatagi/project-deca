@@ -34,7 +34,7 @@ tavernaball/
   addons/godot_mcp/              editor plugin + runtime bridges used by the godot-mcp server
 tools/anim_tests/                headless timing, foot-slide and recording scripts
 docs/initial-movement.md         this document
-HANDOVER.md                      working notes for the next session
+NOTES.md                         what the docs don't cover: preferences, gotchas, dropped ideas, open items
 .mcp.json                        godot-mcp server config for Claude Code
 ```
 
@@ -103,17 +103,17 @@ The "×3" test assumes the user pressed about 0.6 m early, so that each turn hap
 | Export | Now | PES pace | Source |
 |---|---|---|---|
 | `move_speed` (m/s) | 2.964 | 2.47 | measured |
-| `acceleration` (m/s²) | 4.838 | 3.36 | measured |
+| `acceleration` (m/s²) | 7.0 | 3.36 | measured; base raised from 4.838 to refit the PES tests once the agile careful first step (§3.4) was added |
 | `sprint_speed` (m/s) | 4.596 | 3.83 | measured |
-| `sprint_acceleration` (m/s²) | 5.515 | 3.83 | measured |
+| `sprint_acceleration` (m/s²) | 7.98 | 3.83 | measured; refitted the same way (was 5.515) |
 | `turnback_brake` (m/s²) | 7.099 | 4.93 | measured |
-| `deceleration` (m/s²), no keys held | 14.4 | 10 | guess |
+| `deceleration` (m/s²), no keys held | 18 | 10 | guess (raised from 14.4 for snappier play) |
 | `sprint_slowdown` (m/s²), Shift released | 7.2 | 5 | guess |
-| `pivot_turn_speed` (°/s), standing | 432 | 360 | guess (matches the turnback's 180° in 0.5 s at PES pace) |
-| `run_turn_speed` (°/s), turns short of a turnback | 432 | 360 | guess |
-| `sprint_turn_speed` (°/s), same at full sprint | 264 | 220 | guess |
+| `pivot_turn_speed` (°/s), standing | 540 | 360 | guess (raised from 432 for snappier play) |
+| `run_turn_speed` (°/s), turns short of a turnback | 540 | 360 | guess (raised from 432) |
+| `sprint_turn_speed` (°/s), same at full sprint | 330 | 220 | guess (raised from 264) |
 | `turnback_turn_speed` (°/s), cap for procedural turnbacks | 480 | 400 | guess |
-| `turn_sharpness` | 12 | 10 | feel |
+| `turn_sharpness` | 16 | 10 | feel (raised from 12) |
 | `go_angle` (°), start moving once within this of the target heading | 45 | 45 | guess |
 | `turnback_angle` (°), input this far from travel = turnback | 120 | 120 | design |
 | `turnback_min_speed` (m/s), slower reversals pivot instead | 0.6 | 0.5 | design |
@@ -131,6 +131,41 @@ The "×3" test assumes the user pressed about 0.6 m early, so that each turn hap
 - **Exact 180° reversals** turn through the side facing the camera (+Z) for procedural turns, so the player's front stays in view. Turns that play the clip go the clip's way (right).
 
 ---
+
+### 3.4 Agility (added on branch `ball-interaction`)
+At low speed the player is agile, with or without the ball. These rules were developed for dribbling and then made general, so that movement with and without the ball is the same; the ball only changes *when* a change happens (at a touch).
+
+- **Agility curve:** agility is `1 − (speed ÷ (agile_until × jog speed))²`. That's 1 at a standstill, easing slowly, and 0 at jog speed.
+- **What full agility changes:**
+
+| Export | Default | Effect at full agility |
+|---|---|---|
+| `agile_acceleration` | 0.6 | a careful first step. The base accelerations were refitted so the PES tests still match. |
+| `agile_turn_boost` | 2× | turn rate |
+| `agile_turn_snap` | 3× | how sharply turns settle (with the boost): crisp, not gliding |
+| `agile_cut` | 0.5 | the direction of travel jumps half way to the new direction at once: a cut, not a carve |
+| `agile_pivot` | 1.0 | steering turns pivot about the planted (lower) toe, with turn-driven leg stepping off, so the stance foot holds instead of skating |
+| `agile_turnback_speed` | 2 m/s | reversals below this are quick pivots, not full turnbacks |
+
+- **Always on, at any agility:**
+  - `redirect_slowdown` (0.5): changing direction costs that share of speed at 180°, proportionally less for smaller changes. Turnbacks brake instead.
+  - `jog_stride` (0.75): jog strides are 75% of the clips' own length at the same speed, for quicker, shorter steps. The swing is shrunk by mixing the idle pose into the gait (the Locomotion blend), and the stride-matched crossfades allow for it. The sprint keeps its stride.
+
+**PES-style sprint steering.** At sprint pace (sprint held, speed at least jog speed), the heading moves in world-aligned notches of `sprint_notch` (22.5°, so 16 directions), one notch at a time. Each notch is held `sprint_notch_hold` (0.08 s) after the body arrives on it, so a 90° sprint turn is four quick steps (about 0.6 s) rather than an arc. Jogging turns smoothly, and turnbacks are unchanged. The Dribble's prediction runs the same notch logic (`notch_heading`), so touches stay on the foot (90° sprint turn with the ball: 2.7 cm). With the ball, each notch is its own touch, and every sprint touch keeps the same even rhythm, turning or not: every 4 steps, about 1.37 s apart, with the ball sent at about 7.3 m/s. A waiting change is never brought forward at sprint pace. It's made at the next touch in the rhythm, one notch per touch. So a 90° sprint turn with the ball is four touches (about 5.5 s), and the ball is knocked along every notch.
+
+**PES check after the refit** (game frames ×1.2 against the targets):
+
+| Test | Now | Target |
+|---|---|---|
+| acc+move | 47.0 | 46.5 |
+| move | 37.5 | 37.5 |
+| turnback | 31.0 | 31.5 |
+| turnback+move | 66.0 | 66.0 |
+| chain ×3 | 168.5 | 167.0 |
+| accsprint+sprint | 36.5 | 36.5 |
+| sprint | 24.0 | 24.5 |
+
+**Foot slip:** the benches' 4.5 cm "planted" threshold now counts low swinging feet, because the idle mix lowers the swing, so their slip figures read high. With a strict 2 cm threshold, jog turnbacks slip 0.60 m/s on average (mean peak 2.6), slightly better than with full strides (0.62 / 3.2).
 
 ## 4. Animation
 
@@ -240,7 +275,7 @@ Pops stay at about 0.03–0.10, close to what the steady loops produce.
 3. **Exact reversals always turn right.** A mirrored "Walking Turn 180" (Mixamo's Mirror checkbox), wired as a second `OneShot` and chosen by direction, would allow left turns.
 4. **The turn clip is a walking turn,** so jog and sprint turnbacks have a walking posture. A jogging or running 180° turn clip *with a push-off* would look better.
 5. **Several constants are guesses** (§3.2). Useful PES timings to collect: a stop, a standing 180°, a sprint turnback and a sprint release.
-6. **No goals, ball or other players yet.**
+6. **No goals or other players yet.** The ball and touch dribbling came next, on branch `ball-interaction`. See [touch-dribbling.md](touch-dribbling.md).
 
 ---
 

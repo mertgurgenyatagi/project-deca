@@ -33,6 +33,8 @@ var toes := []
 func _initialize() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
+	# Movement is measured without the ball (holding it gates turns).
+	main.get_node("Ball").free()
 	player = main.get_node("Player")
 	skel = player.get_node("Model/Character/Skeleton3D")
 	tree = player.get_node("AnimationTree")

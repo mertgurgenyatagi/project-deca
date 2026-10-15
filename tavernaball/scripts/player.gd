@@ -1,3 +1,4 @@
+class_name Player
 extends CharacterBody3D
 ## Arrow-key controlled player, timed against PES 2013 at jog and sprint
 ## pace, then run 20% faster than PES: speeds, turn rates and blend rates are
@@ -12,6 +13,9 @@ extends CharacterBody3D
 ## - Pivot: from a standstill, the body turns on the spot and starts moving
 ##   once it nearly faces the new direction.
 ## Otherwise the body curves toward the input and travels the way it faces.
+##
+## With the ball, the Dribble child gates the input: a change of direction,
+## a stop or a sprint change takes effect only when a foot is on the ball.
 ##
 ## Animation:
 ## - Gait: idle blends into a jog/sprint gait by ground speed. The jog and
@@ -33,15 +37,15 @@ enum Action { NONE, BRAKE, PUSH_OFF, START }
 ## Top ground speed (m/s). PES: 3.7 m in 45 frames at jog (2.47 m/s).
 @export var move_speed := 2.964
 ## Acceleration from a standstill (m/s²). PES: full jog speed after 22 frames (3.36 m/s²).
-@export var acceleration := 4.838
+@export var acceleration := 7.0
 ## Braking when no key is held (m/s²). Not measured in PES.
-@export var deceleration := 14.4
+@export var deceleration := 18.0
 ## Turn rate when standing (degrees/s). Not measured in PES; matches the turnback's 180° in 0.5 s at PES pace.
-@export var pivot_turn_speed := 432.0
+@export var pivot_turn_speed := 540.0
 ## Turn rate at full speed (degrees/s), for turns short of a turnback. Not measured in PES.
-@export var run_turn_speed := 432.0
+@export var run_turn_speed := 540.0
 ## How softly turns settle into the final heading (higher = harder stop).
-@export var turn_sharpness := 12.0
+@export var turn_sharpness := 16.0
 ## Start moving once the turn left to make is below this angle (degrees).
 @export var go_angle := 45.0
 
@@ -49,11 +53,16 @@ enum Action { NONE, BRAKE, PUSH_OFF, START }
 ## Top ground speed while sprinting (m/s). PES: 3.7 m in 29 frames (3.83 m/s).
 @export var sprint_speed := 4.596
 ## Acceleration while sprinting (m/s²). PES: full sprint speed after 30 frames from a standstill (3.83 m/s²).
-@export var sprint_acceleration := 5.515
+@export var sprint_acceleration := 7.98
 ## Slowing back to jog speed when sprint is released (m/s²). Not measured in PES.
 @export var sprint_slowdown := 7.2
 ## Turn rate at full sprint (degrees/s), for turns short of a turnback. Not measured in PES.
-@export var sprint_turn_speed := 264.0
+@export var sprint_turn_speed := 330.0
+## At sprint pace the heading turns in notches of this many degrees, PES
+## style (0 = smooth turning).
+@export var sprint_notch := 22.5
+## Shortest time on each notch before the next (s).
+@export var sprint_notch_hold := 0.08
 ## Play the sprint-start clip when sprinting off from a standstill. Off, the
 ## gait blends straight in, which slides the feet slightly less but has no
 ## sprint-start posture.
@@ -70,6 +79,34 @@ enum Action { NONE, BRAKE, PUSH_OFF, START }
 ## Fastest the body turns during a procedural turnback (degrees/s). A
 ## full-speed turnback needs 432; slower ones are capped here and finish as a pivot.
 @export var turnback_turn_speed := 480.0
+
+@export_group("Agility")
+## At low speed the player is agile, with or without the ball: full agility at
+## a standstill, gone by this share of jog speed (fading slowly at first and
+## quickly near the end).
+@export var agile_until := 1.0
+## Acceleration at full agility, as a share of normal: a careful first step.
+@export var agile_acceleration := 0.6
+## Turn rate multiplier at full agility.
+@export var agile_turn_boost := 2.0
+## How many times more sharply turns settle at full agility (a crisp finish,
+## not a glide).
+@export var agile_turn_snap := 3.0
+## Share of the way the direction of travel jumps toward a new direction at
+## once at full agility, while the body catches up: a cut, not a carve.
+@export var agile_cut := 0.5
+## At full agility, turns pivot about the planted foot by this share (1 = the
+## foot stays put as the body swings round it; 0 = turn about the centre).
+@export var agile_pivot := 1.0
+## At full agility, reversing below this speed (m/s) is a quick pivot rather
+## than a full turnback (brake, turn, push off).
+@export var agile_turnback_speed := 2.0
+## Changing direction costs this share of speed at a 180° change
+## (proportionally less for smaller ones; turnbacks brake instead).
+@export var redirect_slowdown := 0.5
+## Jog strides are this share of the clips' own length at the same speed:
+## quicker, shorter steps (the sprint keeps its stride).
+@export var jog_stride := 0.75
 
 @export_group("Animation")
 ## Ground speed (m/s) at which the gait has fully replaced the idle.
@@ -159,6 +196,33 @@ class OneShot:
 		return i
 
 
+## Movement input and sprint, read from the keyboard each physics tick while
+## `read_input` is on. Turn it off to drive the player from elsewhere (a test,
+## or later a network copy).
+var move_input := Vector2.ZERO
+var sprint_held := false
+var read_input := true
+
+## Read-only state for the dribble (and anything else watching the player).
+var yaw: float:
+	get: return _yaw
+## Ground velocity: x is world X, y is world Z.
+var ground_velocity: Vector2:
+	get: return _ground
+var gait_phase: float:
+	get: return _gait_phase
+var sprint_weight: float:
+	get: return _sprint_weight
+var action: Action:
+	get: return _action
+var action_dir: Vector2:
+	get: return _action_dir
+## Signed turn of the current turnback (+ left, − right); 0 when none.
+var turn_direction: float:
+	get: return _action_turn if _action in [Action.BRAKE, Action.PUSH_OFF] else 0.0
+var skeleton: Skeleton3D:
+	get: return _skeleton
+
 ## Facing angle around Y; 0 faces +Z, the model's forward axis.
 var _yaw := 0.0
 var _yaw_rate := 0.0
@@ -198,15 +262,29 @@ var _sprint_cycle := 1.0
 var _jog_feet: Array[PackedVector3Array] = []
 var _sprint_feet: Array[PackedVector3Array] = []
 var _idle_anim: Animation
+var _idle_feet := PackedVector3Array()
 var _blend := 0.0
 var _sprint_weight := 0.0
 ## Smoothed turning contribution to leg speed (m/s); turn rate can change
 ## abruptly, the legs must not.
 var _turn_motion := 0.0
+## Stride length as a share of the clips' own (smoothed): below 1 with the
+## ball at a jog, for quicker, shorter steps. The leg swing is shrunk to match
+## by mixing in some of the idle pose, so planted feet stay planted.
+var _stride := 1.0
+## The input acted on last tick, to notice changes of direction.
+var _last_input := Vector2.ZERO
+## Sprint notch steering: [active, notch heading, hold timer].
+var _notch := [false, 0.0, -1.0]
+
+## Current stride share (1 = the clips' own stride).
+var stride: float:
+	get: return _stride
 
 @onready var _model: Node3D = $Model
 @onready var _skeleton: Skeleton3D = $Model/Character/Skeleton3D
 @onready var _anim_tree: AnimationTree = $AnimationTree
+@onready var _dribble: Dribble = get_node_or_null(^"Dribble")
 
 
 func _ready() -> void:
@@ -228,6 +306,7 @@ func _ready() -> void:
 		_jog_feet.append(_feet_at(jog, fposmod(phase + _jog_offset, 1.0) * _jog_length))
 		_sprint_feet.append(_feet_at(sprint, fposmod(phase + _sprint_offset, 1.0) * _sprint_length))
 
+	_idle_feet = _feet_at(_idle_anim, 0.0)
 	_walk_turn = _make_one_shot("Turn", &"turn_180/turn_180", hip_height)
 	_sprint_start = _make_one_shot("Start", &"sprint_start/sprint_start", hip_height)
 	_yaw = _model.rotation.y
@@ -256,9 +335,22 @@ func _stride_offset(anim: Animation) -> float:
 
 
 func _physics_process(delta: float) -> void:
-	var input := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
-	_sprinting = Input.is_action_pressed(&"sprint")
+	if read_input:
+		move_input = Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
+		sprint_held = Input.is_action_pressed(&"sprint")
+	var input := move_input
+	_sprinting = sprint_held
+	if _dribble:
+		# With the ball, changes of direction or pace wait for a touch.
+		input = _dribble.gate_input(move_input)
+		_sprinting = _dribble.gate_sprint(sprint_held)
 	var previous_yaw := _yaw
+	# Changing direction costs pace (a turnback brakes instead). With the ball
+	# this happens at the touch that makes the change.
+	if _action == Action.NONE and input != Vector2.ZERO and _last_input != Vector2.ZERO \
+			and not input.is_equal_approx(_last_input) and not _should_turn_back(input):
+		_ground *= 1.0 - redirect_slowdown * absf(_last_input.angle_to(input)) / PI
+	_last_input = input
 
 	# An action carries on only while its direction is held.
 	if _action != Action.NONE and (input == Vector2.ZERO or input.normalized().dot(_action_dir) < 0.7):
@@ -280,6 +372,9 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = _ground.x
 	velocity.z = _ground.y
+	var pivot := _pivot_offset(previous_yaw, _yaw)
+	velocity.x += pivot.x / delta
+	velocity.z += pivot.y / delta
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 	move_and_slide()
@@ -292,6 +387,30 @@ func _process(delta: float) -> void:
 	_update_animation(delta)
 
 
+## When agile, steering turns pivot about the planted foot rather than the
+## body's centre: the body shifts so that foot stays where it is, as in a real
+## plant-and-turn, instead of being dragged round (skating). Returns the
+## ground shift (x: world X, y: world Z) for this tick.
+func _pivot_offset(from_yaw: float, to_yaw: float) -> Vector2:
+	if from_yaw == to_yaw:
+		return Vector2.ZERO
+	var weight := _pivot_share()
+	if weight <= 0.0:
+		return Vector2.ZERO
+	# The planted foot: the lower toe.
+	var left := _skeleton.get_bone_global_pose(_skeleton.find_bone(LEG_CHAINS[0][3])).origin
+	var right := _skeleton.get_bone_global_pose(_skeleton.find_bone(LEG_CHAINS[1][3])).origin
+	var foot := left if left.y < right.y else right
+	foot.y = 0.0
+	var before := Basis(Vector3.UP, from_yaw) * foot
+	var after := Basis(Vector3.UP, to_yaw) * foot
+	return Vector2(before.x - after.x, before.z - after.z) * weight
+
+
+func _pivot_share() -> float:
+	return agile_pivot * agility_at(_ground.length()) if _action == Action.NONE else 0.0
+
+
 func _end_action() -> void:
 	_action = Action.NONE
 	for clip in _one_shots:
@@ -301,7 +420,7 @@ func _end_action() -> void:
 
 func _should_turn_back(input: Vector2) -> bool:
 	return input != Vector2.ZERO \
-			and _ground.length() > turnback_min_speed \
+			and _ground.length() > turnback_threshold() \
 			and absf(_ground.angle_to(input)) >= deg_to_rad(turnback_angle)
 
 
@@ -421,19 +540,58 @@ func _play_until_exit(clip: OneShot, speed: float) -> void:
 		_sync_gait()
 
 
+## PES-style sprint steering: at sprint pace the heading moves in notches of
+## `sprint_notch` degrees (world-aligned), one notch at a time, each held at
+## least `sprint_notch_hold` seconds, instead of curving smoothly. Returns the
+## heading to steer for this tick.
+func _sprint_heading(wanted: float, speed: float, delta: float) -> float:
+	return notch_heading(_notch, _yaw, wanted, speed, _sprinting, delta)
+
+
+## One tick of notch steering on `state` ([notching, notch yaw, hold timer],
+## updated in place), for a body at `yaw` wanting `wanted`. Shared with the
+## Dribble's prediction so both step through the same notches.
+func notch_heading(state: Array, yaw: float, wanted: float, speed: float, sprinting: bool, delta: float) -> float:
+	if not sprinting or speed < move_speed or sprint_notch <= 0.0:
+		state[0] = false
+		return wanted
+	var notch := deg_to_rad(sprint_notch)
+	if not state[0]:
+		state[0] = true
+		state[1] = roundf(yaw / notch) * notch
+		state[2] = -1.0
+	# The hold starts once the body has arrived on its notch (-1: not yet).
+	if state[2] < 0.0 and absf(angle_difference(yaw, state[1])) < notch * 0.25:
+		state[2] = sprint_notch_hold
+	if state[2] >= 0.0:
+		state[2] = maxf(state[2] - delta, 0.0)
+	var goal := roundf(wanted / notch) * notch
+	var left := _turn_toward(state[1], goal)
+	if absf(left) > notch * 0.5 and state[2] == 0.0:
+		state[1] = wrapf(state[1] + signf(left) * notch, -PI, PI)
+		state[2] = -1.0
+	return state[1]
+
+
+## A copy of the current notch steering state (for prediction).
+func notch_state() -> Array:
+	return _notch.duplicate()
+
+
 func _step_steering(input: Vector2, delta: float) -> void:
 	if input == Vector2.ZERO:
 		_ground = _ground.move_toward(Vector2.ZERO, deceleration * delta)
 		return
 
 	var speed := _ground.length()
-	var target_yaw := atan2(input.x, input.y)
-	var turn_speed := lerpf(pivot_turn_speed, run_turn_speed, clampf(speed / move_speed, 0.0, 1.0))
-	if speed > move_speed:
-		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
-	var max_step := deg_to_rad(turn_speed) * delta
-	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-turn_sharpness * delta))
+	var target_yaw := _sprint_heading(atan2(input.x, input.y), speed, delta)
+	var max_step := turn_rate_at(speed) * delta
+	# Agile turns snap round rather than glide.
+	var step := _turn_toward(_yaw, target_yaw) * (1.0 - exp(-turn_sharpness_at(speed) * delta))
 	_yaw = wrapf(_yaw + clampf(step, -max_step, max_step), -PI, PI)
+	# Travel follows the facing, except that when agile it cuts part of the way
+	# to the new direction at once while the body catches up.
+	var travel_yaw := _yaw + _turn_toward(_yaw, target_yaw) * cut_at(speed)
 
 	var target_speed := 0.0
 	if absf(angle_difference(_yaw, target_yaw)) < deg_to_rad(go_angle):
@@ -443,7 +601,104 @@ func _step_steering(input: Vector2, delta: float) -> void:
 		# Easing off a sprint into a jog is gentler than stopping.
 		rate = sprint_slowdown if target_speed > 0.0 else deceleration
 	speed = move_toward(speed, target_speed, rate * delta)
-	_ground = Vector2(sin(_yaw), cos(_yaw)) * speed
+	_ground = Vector2(sin(travel_yaw), cos(travel_yaw)) * speed
+
+
+## Steering turn rate (rad/s) at a ground speed: pivot rate standing, run
+## rate at jog speed, sprint rate at full sprint.
+func turn_rate_at(speed: float) -> float:
+	var turn_speed := lerpf(pivot_turn_speed, run_turn_speed, clampf(speed / move_speed, 0.0, 1.0))
+	if speed > move_speed:
+		turn_speed = lerpf(run_turn_speed, sprint_turn_speed, inverse_lerp(move_speed, sprint_speed, minf(speed, sprint_speed)))
+	# Nimbler when agile.
+	turn_speed *= lerpf(1.0, agile_turn_boost, agility_at(speed))
+	return deg_to_rad(turn_speed)
+
+
+## Speed above which reversing is a turnback rather than a pivot (higher
+## with the ball at the feet).
+func turnback_threshold() -> float:
+	return lerpf(turnback_min_speed, maxf(turnback_min_speed, agile_turnback_speed), agility_at(_ground.length()))
+
+
+## How agile the player is at a ground speed: 1 at a standstill, easing to 0
+## by `agile_until` × jog speed.
+func agility_at(speed: float) -> float:
+	var x := clampf(speed / (agile_until * move_speed), 0.0, 1.0)
+	return 1.0 - x * x
+
+
+## Acceleration at a speed (sprint or not): a careful first step when agile.
+func acceleration_at(speed: float, sprinting: bool) -> float:
+	var rate := sprint_acceleration if sprinting else acceleration
+	return rate * lerpf(1.0, agile_acceleration, agility_at(speed))
+
+
+## How sharply turns settle at a speed (crisper when agile).
+func turn_sharpness_at(speed: float) -> float:
+	var agility := agility_at(speed)
+	return turn_sharpness * lerpf(1.0, agile_turn_boost, agility) * lerpf(1.0, agile_turn_snap, agility)
+
+
+## Share of a turn the direction of travel takes at once at a speed (a cut).
+func cut_at(speed: float) -> float:
+	return agile_cut * agility_at(speed)
+
+
+## Whether this input, applied now, would start a turnback.
+func would_turn_back(input: Vector2) -> bool:
+	return _action == Action.NONE and _should_turn_back(input)
+
+
+## Signed turn (+ left, − right) the body would make toward this input: as a
+## turnback would make it, or else as steering would.
+func turn_for(input: Vector2) -> float:
+	var target := atan2(input.x, input.y)
+	if would_turn_back(input):
+		var turn := angle_difference(_yaw, target)
+		if absf(turn) > deg_to_rad(179.0):
+			turn = absf(turn) * _walk_turn.turn_sign
+		return turn
+	return _turn_toward(_yaw, target)
+
+
+func top_speed() -> float:
+	return _top_speed()
+
+
+func current_acceleration() -> float:
+	return _acceleration()
+
+
+## Stride phase advance per second at a ground speed, with the jog/sprint
+## blend that speed settles to.
+func phase_rate_at(speed: float) -> float:
+	return _phase_rate(speed, _sprint_weight_at(speed))
+
+
+## Model-space foot and toe points of the idle pose (as `gait_feet_at`).
+func idle_feet() -> PackedVector3Array:
+	return _feet_at(_idle_anim, 0.0)
+
+
+## Jog/sprint blend the gait settles to at a ground speed.
+func sprint_weight_at(speed: float) -> float:
+	return _sprint_weight_at(speed)
+
+
+## Model-space foot and toe points of the gait at a stride phase:
+## [left foot, left toe, right foot, right toe]. Interpolated between samples.
+func gait_feet_at(phase: float, weight: float) -> PackedVector3Array:
+	var at := fposmod(phase, 1.0) * GAIT_SAMPLES
+	var i := int(at) % GAIT_SAMPLES
+	var j := (i + 1) % GAIT_SAMPLES
+	var t := at - floorf(at)
+	var feet := PackedVector3Array()
+	for k in _jog_feet[i].size():
+		var jog := _jog_feet[i][k].lerp(_jog_feet[j][k], t)
+		var sprint := _sprint_feet[i][k].lerp(_sprint_feet[j][k], t)
+		feet.append(jog.lerp(sprint, weight))
+	return feet
 
 
 func _top_speed() -> float:
@@ -451,7 +706,7 @@ func _top_speed() -> float:
 
 
 func _acceleration() -> float:
-	return sprint_acceleration if _sprinting else acceleration
+	return acceleration_at(_ground.length(), _sprinting)
 
 
 ## Signed turn from one yaw to another. A full about-face turns through the
@@ -477,8 +732,9 @@ func _sprint_weight_at(speed: float) -> float:
 
 
 ## Stride phase advance per second at a ground speed and jog/sprint weight.
+## Shorter strides (with the ball) turn the legs over faster.
 func _phase_rate(speed: float, sprint_weight: float) -> float:
-	var cycle := lerpf(_jog_cycle, _sprint_cycle, sprint_weight)
+	var cycle := lerpf(_jog_cycle, _sprint_cycle, sprint_weight) * _stride
 	return maxf(speed / cycle, min_jog_rate / _jog_length)
 
 
@@ -495,11 +751,14 @@ func _gait_advance(speed: float, accel: float, distance: float) -> float:
 	return advance
 
 
+## Gait foot points at a phase, as they show: shorter strides mix in the idle
+## pose (see `jog_stride`), which the stride matching must allow for.
 func _gait_feet(phase: float, sprint_weight: float) -> PackedVector3Array:
 	var i := posmod(roundi(fposmod(phase, 1.0) * GAIT_SAMPLES), GAIT_SAMPLES)
+	var stride_share := lerpf(jog_stride, 1.0, sprint_weight)
 	var feet := PackedVector3Array()
 	for j in _jog_feet[i].size():
-		feet.append(_jog_feet[i][j].lerp(_sprint_feet[i][j], sprint_weight))
+		feet.append(_idle_feet[j].lerp(_jog_feet[i][j].lerp(_sprint_feet[i][j], sprint_weight), stride_share))
 	return feet
 
 
@@ -567,7 +826,12 @@ func _bone_rotation(anim: Animation, bone_name: String, time: float) -> Quaterni
 
 func _update_animation(delta: float) -> void:
 	var weight := 1.0 - exp(-blend_sharpness * delta)
-	_turn_motion = lerpf(_turn_motion, _yaw_rate * turn_step_radius, weight)
+	_stride = lerpf(_stride, lerpf(jog_stride, 1.0, _sprint_weight), weight)
+	# Turning makes the legs step (so pivots don't freeze them), except while
+	# pivoting about a planted foot: then that foot holds and the body swings
+	# round it, and stepping on the spot would only make the feet skate.
+	var stepping := 1.0 - _pivot_share()
+	_turn_motion = lerpf(_turn_motion, _yaw_rate * turn_step_radius * stepping, weight)
 	var real := get_real_velocity()
 	var ground_speed := Vector2(real.x, real.z).length()
 	var speed := maxf(ground_speed, _turn_motion)
@@ -581,7 +845,8 @@ func _update_animation(delta: float) -> void:
 	else:
 		_gait_phase = fposmod(_gait_phase + _phase_rate(speed, _sprint_weight) * delta, 1.0)
 	_anim_tree.set(&"parameters/IdleRate/scale", idle_rate)
-	_anim_tree.set(&"parameters/Locomotion/blend_amount", _blend)
+	# Shorter strides: shrink the leg swing to match by mixing in the idle.
+	_anim_tree.set(&"parameters/Locomotion/blend_amount", _blend * _stride)
 	_anim_tree.set(&"parameters/Gait/blend_amount", _sprint_weight)
 	_anim_tree.set(&"parameters/JogSeek/seek_request", fposmod(_gait_phase + _jog_offset, 1.0) * _jog_length)
 	_anim_tree.set(&"parameters/SprintSeek/seek_request", fposmod(_gait_phase + _sprint_offset, 1.0) * _sprint_length)

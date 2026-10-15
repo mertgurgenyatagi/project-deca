@@ -9,6 +9,8 @@ var player: CharacterBody3D
 func _initialize() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
+	# Movement is measured without the ball (holding it gates turns).
+	main.get_node("Ball").free()
 	player = main.get_node("Player")
 	_run.call_deferred()
 

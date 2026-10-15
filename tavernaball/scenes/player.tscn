@@ -7,6 +7,8 @@
 [ext_resource type="AnimationLibrary" path="res://assets/animations/turns/turn_180.fbx" id="5_turn"]
 [ext_resource type="AnimationLibrary" path="res://assets/animations/locomotion/sprint.fbx" id="6_sprint"]
 [ext_resource type="AnimationLibrary" path="res://assets/animations/starts/sprint_start.fbx" id="8_start"]
+[ext_resource type="Script" path="res://scripts/dribble.gd" id="9_dribble"]
+[ext_resource type="Script" path="res://scripts/intent_lean.gd" id="10_lean"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.3
@@ -123,3 +125,9 @@ parameters/TurnFreeze/scale = 0.0
 parameters/TurnBlend/blend_amount = 0.0
 parameters/StartFreeze/scale = 0.0
 parameters/StartBlend/blend_amount = 0.0
+
+[node name="Dribble" type="Node" parent="."]
+script = ExtResource("9_dribble")
+
+[node name="IntentLean" type="SkeletonModifier3D" parent="Model/Character/Skeleton3D"]
+script = ExtResource("10_lean")
