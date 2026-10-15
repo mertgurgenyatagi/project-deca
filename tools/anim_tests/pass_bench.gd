@@ -89,19 +89,20 @@ func _choice_checks() -> void:
 	b.name = "b"
 	c.name = "c"
 	var pick := func(power: float, mates: Array, aim := RIGHT) -> String:
-		var chosen: Node = Passing.choose_target(Vector2.ZERO, aim, power, mates, 60.0)
+		var chosen: Node = Passing.choose_target(Vector2.ZERO, aim, power, mates, 90.0, 1.5)
 		return "none" if chosen == null else str(chosen.name)
 	var one := [[a, Vector2(10, 1)]]
 	_check("one in the cone always gets it", pick.call(0.0, one) == "a" and pick.call(1.0, one) == "a")
 	var two := [[b, Vector2(14, -3)], [a, Vector2(7, -3)]]
-	_check("two: under 2/3 goes to the top-ranked", pick.call(0.6, two) == "a", pick.call(0.6, two))
-	_check("two: over 2/3 goes to the second", pick.call(0.7, two) == "b", pick.call(0.7, two))
+	_check("two: under 60% goes to the top-ranked", pick.call(0.59, two) == "a", pick.call(0.59, two))
+	_check("two: over 60% goes to the second", pick.call(0.61, two) == "b", pick.call(0.61, two))
 	var three := [[c, Vector2(20, 0)], [a, Vector2(6, 0)], [b, Vector2(12, 0)]]
-	_check("three: under 1/2 to the first", pick.call(0.49, three) == "a", pick.call(0.49, three))
-	_check("three: 1/2 to 5/6 to the second", pick.call(0.51, three) == "b" and pick.call(0.83, three) == "b")
-	_check("three: over 5/6 to the third", pick.call(0.84, three) == "c" and pick.call(1.0, three) == "c")
-	var edge := [[a, Vector2.from_angle(deg_to_rad(29.0)) * 8.0], [b, Vector2.from_angle(deg_to_rad(31.0)) * 8.0]]
-	_check("cone: 29 degrees in, 31 out", pick.call(0.0, edge) == "a" and pick.call(1.0, edge) == "a")
+	# 1.5 : 1 between neighbours: 47.4%, 31.6%, 21.1%.
+	_check("three: under 47.4% to the first", pick.call(0.47, three) == "a", pick.call(0.47, three))
+	_check("three: 47.4% to 78.9% to the second", pick.call(0.48, three) == "b" and pick.call(0.78, three) == "b")
+	_check("three: over 78.9% to the third", pick.call(0.80, three) == "c" and pick.call(1.0, three) == "c")
+	var edge := [[a, Vector2.from_angle(deg_to_rad(44.0)) * 8.0], [b, Vector2.from_angle(deg_to_rad(46.0)) * 8.0]]
+	_check("cone: 44 degrees in, 46 out", pick.call(0.0, edge) == "a" and pick.call(1.0, edge) == "a")
 	# Off the centre line counts squared: a far mate on the line outranks a
 	# near one 3 m off it (-10 against -9 - 5.8).
 	var ranked := [[a, Vector2(5, 3)], [b, Vector2(10, 0)]]

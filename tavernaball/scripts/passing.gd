@@ -7,11 +7,11 @@ extends Node
 ## movement keys as they are then (or the facing, with no keys held):
 ## - Teammates inside a `cone_angle` cone around that direction are ranked by
 ##   −(distance from the cone's centre line)² − distance. With N of them, the
-##   bar is split into N bands, priority i taking 2(N − i + 1) / (N(N + 1)) of
-##   it, the first and largest band going to the top-ranked. Where the
-##   strength lands picks the receiver. The ball is played to them at a fixed
-##   pace (it arrives at `arrival_speed`), partly leading a running receiver.
-##   It never stops short.
+##   bar is split into N bands, the first going to the top-ranked, each band
+##   `band_ratio` times the next (60/40 for two, 47/32/21 for three). Where
+##   the strength lands picks the receiver. The ball is played to them at a
+##   pace set by the distance alone, √distance ÷ `pace_constant`, partly
+##   leading a running receiver.
 ## - With nobody in the cone, the ball goes straight along it, as far as the
 ##   strength says.
 ## The decision is carried out the next time the player is on the ball: at
@@ -24,7 +24,7 @@ extends Node
 
 @export_group("Button")
 ## Time to fill the strength bar (s).
-@export var charge_time := 0.375
+@export var charge_time := 0.3
 ## The pass is decided this long after the button is let go (s; 0 = as it
 ## is let go); the direction can still change until then.
 @export var lock_delay := 0.0
@@ -33,16 +33,17 @@ extends Node
 
 @export_group("Aim")
 ## Teammates within this cone (degrees, full width) around the aim can receive.
-@export var cone_angle := 60.0
+@export var cone_angle := 90.0
+## Each receiver's band of the strength bar is this many times the next one's.
+@export var band_ratio := 1.5
 ## Share of a running receiver's motion over the ball's travel time that the
 ## pass leads them by (1 = into their stride, 0 = to where they are).
 @export var lead := 0.5
 
 @export_group("Pace")
-## A pass to a teammate arrives at this speed (m/s), whatever the strength.
-@export var arrival_speed := 10.0
-## Fastest a pass is struck (m/s).
-@export var max_speed := 24.0
+## A pass to a teammate is struck at √distance ÷ this (m/s, distance in m),
+## whatever the strength: 0.1556 strikes a 3 m pass at 11.1 m/s, 10 m at 20.
+@export var pace_constant := 0.1556
 ## With nobody to receive it, the ball rolls this far at an empty bar (m)...
 @export var min_distance := 8.0
 ## ...and this far at a full one (m).
@@ -63,7 +64,7 @@ extends Node
 @export var plant_timeout := 1.5
 ## First time: the swing starts if the coming ball will be this close to the
 ## foot as it meets it (m). Otherwise the ball is controlled first.
-@export var first_time_reach := 0.35
+@export var first_time_reach := 0.2
 
 @export_group("Sound")
 ## Kick sounds, one picked at random each time.
@@ -185,7 +186,7 @@ func planned_yaw() -> float:
 ## The receiver for a pass from `from` aimed along `direction` at `power`
 ## (0-1), or null with nobody in the cone. `mates` holds [player, ground
 ## position] pairs.
-static func choose_target(from: Vector2, direction: Vector2, power: float, mates: Array, cone: float) -> Node:
+static func choose_target(from: Vector2, direction: Vector2, power: float, mates: Array, cone: float, ratio := 1.5) -> Node:
 	var ranked := []
 	for mate in mates:
 		var to: Vector2 = mate[1] - from
@@ -197,10 +198,13 @@ static func choose_target(from: Vector2, direction: Vector2, power: float, mates
 		return null
 	ranked.sort_custom(func(a, b): return a[0] > b[0])
 	var n := ranked.size()
+	# Band i is ratio^(N - 1 - i) parts of the bar: each `ratio` times the next.
+	var parts := 0.0
+	for i in n:
+		parts += pow(ratio, i)
 	var edge := 0.0
 	for i in n:
-		# Priority i + 1 takes 2(N - i) / (N(N + 1)) of the bar.
-		edge += 2.0 * (n - i) / (n * (n + 1.0))
+		edge += pow(ratio, n - 1 - i) / parts
 		if power < edge:
 			return ranked[i][1]
 	return ranked[n - 1][1]
@@ -233,7 +237,7 @@ func _decide() -> void:
 	if direction == Vector2.ZERO:
 		direction = Vector2(sin(_player.yaw), cos(_player.yaw))
 	direction = direction.normalized()
-	var target := choose_target(_hips(), direction, strength, _mates(), cone_angle)
+	var target := choose_target(_hips(), direction, strength, _mates(), cone_angle, band_ratio)
 	_decision = {"target": target, "direction": direction, "strength": strength, "left": queue_time}
 
 
@@ -321,10 +325,12 @@ func _first_time_now() -> bool:
 	var ball := _dribble.ball
 	var contact := _player.kick_contact_time / _player.kick_rate
 	var spot := _ground(_dribble.strike_point(_player.kick_hips_after(contact), _player.kick_yaw))
-	# The swing starts on the next tick.
-	var t := ball.time_since_release() + contact + get_physics_process_delta_time()
+	# Contact comes on the tick nearest the clip's contact time (see _carry_out),
+	# and the ball's position then is the one after that many more ticks.
+	var tick := get_physics_process_delta_time()
+	var t := ball.time_since_release() + ceilf(contact / tick - 0.5) * tick
 	var now := _ground(ball.roll_position_at(t)).distance_to(spot)
-	var later := _ground(ball.roll_position_at(t + get_physics_process_delta_time())).distance_to(spot)
+	var later := _ground(ball.roll_position_at(t + tick)).distance_to(spot)
 	return now <= first_time_reach and now <= later
 
 
@@ -355,7 +361,7 @@ func _release() -> void:
 	if target:
 		var aim := _aim_point(from, target)
 		direction = (aim - from).normalized()
-		speed = minf(ball.speed_to_arrive(from.distance_to(aim), arrival_speed), max_speed)
+		speed = pass_speed(from.distance_to(aim))
 	else:
 		speed = ball.speed_to_stop_at(lerpf(min_distance, max_distance, _kick.strength))
 	var hop := clampf((speed - hop_from) * hop_per_speed, 0.0, max_hop)
@@ -364,6 +370,11 @@ func _release() -> void:
 			"first_time": _kick.get("struck_first_time", false), "error": from.distance_to(spot)})
 	_dribble.release(Vector3(direction.x, 0.0, direction.y) * speed, hop, target)
 	_play_sound(ball.position, speed)
+
+
+## How hard a pass to a teammate `distance` away is struck (m/s).
+func pass_speed(distance: float) -> float:
+	return sqrt(distance) / pace_constant
 
 
 ## Where to play the ball for `target`: where they are plus `lead` of how far
@@ -375,7 +386,7 @@ func _aim_point(from: Vector2, target: Node) -> Vector2:
 	var aim := at
 	for i in 3:
 		var distance := from.distance_to(aim)
-		var travel := ball.time_to_roll(minf(ball.speed_to_arrive(distance, arrival_speed), max_speed), distance)
+		var travel := ball.time_to_roll(pass_speed(distance), distance)
 		if travel == INF:
 			break
 		aim = at + run * travel * lead
