@@ -53,47 +53,19 @@ enum Foot { LEFT, RIGHT }
 @export var touch_speed_margin := 1.0
 
 @export_group("Grip")
-## At the start of a movement the player keeps the ball at their feet: grip
-## is full at a standstill and gone by this share of jog speed, fading
-## slowly at first and quickly near the end.
-@export var grip_until := 1.0
+## Grip follows the player's agility (player.gd): full at a standstill, gone
+## by jog speed. At full grip the player keeps the ball at their feet.
 ## Steps between touches at full grip (1 = every step).
 @export var grip_touch_steps := 1
 ## Ball's arrival speed at the next touch, as a share of the player's, at full
 ## grip: soft touches, so the ball hardly runs ahead.
 @export var grip_arrival_ratio := 0.9
-## The player's acceleration at full grip, as a share of normal: moving off
-## with the ball is more careful than without it.
-@export var grip_acceleration := 0.6
 ## At full grip the ball still counts as at the feet this far from the hips
 ## (m), so a waiting change is made at once (`control_reach` with no grip).
 @export var grip_control_reach := 0.75
-## With the ball at the feet the player is nimble: turn rate is multiplied by
-## this at full grip...
-@export var grip_turn_boost := 2.0
-## ...turns settle this many times more sharply (a crisp finish, not a glide)...
-@export var grip_turn_snap := 3.0
-## ...and the direction of travel jumps this share of the way to the new
-## direction at once, while the body catches up: a cut, not a carve.
-@export var grip_cut := 0.5
-## At full grip, turns pivot about the planted foot by this share (1 = the
-## foot stays exactly put as the body turns; 0 = turn about the body's centre).
-@export var grip_pivot := 1.0
 ## At full grip the ball may steer this many times harder between touches,
 ## so it keeps up with quick cuts.
 @export var grip_bend_boost := 2.0
-## With the ball at the feet, reversing below this speed (m/s, at full grip)
-## is a quick pivot rather than a full turnback (brake, turn, push off).
-@export var grip_turnback_speed := 2.0
-## A touch that takes the ball round a corner costs the player this share of
-## their speed at a 180° change (proportionally less for smaller ones).
-@export var redirect_slowdown := 0.5
-
-@export_group("Stride")
-## With the ball, jog strides are this share of their normal length at the
-## same speed: quicker, shorter steps (and so quicker touches). The sprint
-## keeps its stride.
-@export var dribble_stride := 0.75
 
 @export_group("Control")
 ## Steering on the ball between touches (m/s²) before the cap starts growing.
@@ -383,7 +355,7 @@ func _sim_step(s: Sim, dt: float) -> void:
 	var top := p.sprint_speed if _latched_sprint else p.move_speed
 	var speed := s.speed
 	var accel := p.sprint_acceleration if _latched_sprint else p.acceleration
-	accel *= lerpf(1.0, grip_acceleration, _grip_at(speed))
+	accel = p.acceleration_at(speed, _latched_sprint)
 	match s.action:
 		Player.Action.BRAKE:
 			speed = move_toward(speed, 0.0, p.turnback_brake * dt)
@@ -400,10 +372,10 @@ func _sim_step(s: Sim, dt: float) -> void:
 			else:
 				var target_yaw := atan2(input.x, input.y)
 				var max_step := p.turn_rate_at(speed) * dt
-				var sharp := p.turn_sharpness * turn_scale() * turn_snap()
+				var sharp := p.turn_sharpness_at(speed)
 				var step := angle_difference(s.yaw, target_yaw) * (1.0 - exp(-sharp * dt))
 				s.yaw = wrapf(s.yaw + clampf(step, -max_step, max_step), -PI, PI)
-				var travel_yaw := s.yaw + angle_difference(s.yaw, target_yaw) * cut_share()
+				var travel_yaw := s.yaw + angle_difference(s.yaw, target_yaw) * p.cut_at(speed)
 				var target_speed := 0.0
 				if absf(angle_difference(s.yaw, target_yaw)) < deg_to_rad(p.go_angle):
 					target_speed = top * input.length()
@@ -477,69 +449,14 @@ func _touch_steps() -> int:
 	return maxi(roundi(steps), 1)
 
 
-## Stride length the player should use, as a share of normal: shorter at a
-## jog with the ball, normal at a sprint or without it.
-func stride_scale() -> float:
-	if not holding():
-		return 1.0
-	return lerpf(dribble_stride, 1.0, _player.sprint_weight)
-
-
-## Multiplier on how sharply turns settle: crisper with the ball at the feet.
-func turn_snap() -> float:
-	if not holding():
-		return 1.0
-	return lerpf(1.0, grip_turn_snap, _grip())
-
-
-## How fully turns pivot about the planted foot (0-1): with the ball at the feet.
-func pivot_share() -> float:
-	if not holding():
-		return 0.0
-	return grip_pivot * _grip()
-
-
-## Share of the way the direction of travel jumps toward a new direction at
-## once (a cut), with the ball at the feet.
-func cut_share() -> float:
-	if not holding():
-		return 0.0
-	return grip_cut * _grip()
-
-
-## Speed above which a reversal is a turnback: higher with the ball at the
-## feet, so quick reversals there are pivots.
-func turnback_speed(base: float) -> float:
-	if not holding():
-		return base
-	return lerpf(base, maxf(base, grip_turnback_speed), _grip())
-
-
-## Scale on the player's turning: quicker while the ball is at the feet.
-func turn_scale() -> float:
-	if not holding():
-		return 1.0
-	return lerpf(1.0, grip_turn_boost, _grip())
-
-
-## Scale on the player's acceleration: slower moving off while gripping the ball.
-func acceleration_scale() -> float:
-	if not holding():
-		return 1.0
-	return lerpf(1.0, grip_acceleration, _grip())
-
-
-## How firmly the ball is kept at the feet: 1 at a standstill, easing to 0 by
-## `grip_until` × jog speed.
+## How firmly the ball is kept at the feet: the player's agility (1 at a
+## standstill, easing to 0 by jog speed).
 func _grip() -> float:
 	return _grip_at(_player.ground_velocity.length())
 
 
 func _grip_at(speed: float) -> float:
-	# Eases off gently at first and falls away only near the top, so grip
-	# lasts through most of the acceleration.
-	var x := clampf(speed / (grip_until * _player.move_speed), 0.0, 1.0)
-	return 1.0 - x * x
+	return _player.agility_at(speed)
 
 
 ## Where the ball should next arrive, when, and how fast.
@@ -657,10 +574,6 @@ func _update_resting() -> void:
 ## A touch: the ball's velocity changes outright, starting a new segment.
 func _touch(kind: String, contact := {}) -> void:
 	var error := _contact_error()
-	# Taking the ball round a corner costs pace (a turnback brakes anyway).
-	if _latched_input != Vector2.ZERO and _raw_input != Vector2.ZERO and not _player.would_turn_back(_raw_input):
-		var share := absf(_latched_input.angle_to(_raw_input)) / PI
-		_player.scale_speed(1.0 - redirect_slowdown * share)
 	# A foot is on the ball: the player may now act on the keys as they are.
 	_latch()
 	if kind == "regular":

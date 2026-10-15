@@ -52,6 +52,8 @@ tools/anim_tests/
 
 ## 3. Dribbling (`dribble.gd`)
 
+> **Movement is the same with or without the ball.** The agility rules (careful first step, faster and crisper turns, cuts, pivoting about the planted foot, low-speed reversals as pivots, redirects costing pace, shorter jog strides) live in `player.gd` and depend only on speed. See [initial-movement.md](initial-movement.md) §3.4. The Dribble only gates *when* a change is acted on (at a touch) and handles the ball. Where the notes below say a rule applies "with the ball" or "at full grip", the movement part now applies always, and "grip" is the player's agility.
+
 ### 3.0 Changes wait for the ball
 While the player holds the ball, `player.gd` moves on the input the Dribble lets through (`gate_input`, `gate_sprint`), not on the raw keys.
 
