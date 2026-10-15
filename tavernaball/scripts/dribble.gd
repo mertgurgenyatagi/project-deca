@@ -240,6 +240,12 @@ func intent_sprint() -> int:
 	return 1 if _raw_sprint else -1
 
 
+## At sprint pace touches keep their own even rhythm: a waiting change is
+## made at the next touch in that rhythm, never brought forward.
+func _sprint_rhythm() -> bool:
+	return _latched_sprint and _player.ground_velocity.length() >= _player.move_speed
+
+
 ## Whether a new direction, or a stop or start, is waiting for a touch.
 func _direction_pending() -> bool:
 	if (_raw_input == Vector2.ZERO) != (_latched_input == Vector2.ZERO):
@@ -251,8 +257,8 @@ func _direction_pending() -> bool:
 
 ## Lets the player act on the keys as they are now.
 ## At a sprint (PES style) one touch takes the run at most one notch round:
-## a bigger change is made notch by notch, a touch each, so the ball is
-## knocked along every notch.
+## a bigger change is made notch by notch, a touch each at the sprint's own
+## even rhythm, so the ball is knocked along every notch.
 func _latch() -> void:
 	var input := _raw_input
 	var notch := deg_to_rad(_player.sprint_notch)
@@ -263,8 +269,6 @@ func _latch() -> void:
 		if absf(turn) > notch * 0.5:
 			var step := heading + signf(turn) * notch
 			input = Vector2(sin(step), cos(step)) * input.length()
-			# Still short of the keys: the next step brings the next touch.
-			_was_pending = false
 	_latched_input = input
 	_latched_sprint = _raw_sprint
 	_effective_input = input
@@ -459,7 +463,8 @@ func _touch_steps() -> int:
 	var steps := lerpf(jog_touch_steps, sprint_touch_steps, _player.sprint_weight)
 	steps = lerpf(steps, grip_touch_steps, _grip())
 	var input := _latched_input
-	if input != Vector2.ZERO:
+	# Below sprint pace, turning shortens the knock; a sprint keeps its rhythm.
+	if input != Vector2.ZERO and not _sprint_rhythm():
 		var off := absf(angle_difference(_player.yaw, atan2(input.x, input.y)))
 		steps *= clampf(1.0 - 0.5 * rad_to_deg(off) / turn_shorten_angle, 0.5, 1.0)
 	return maxi(roundi(steps), 1)
@@ -648,7 +653,7 @@ func _steer(delta: float) -> void:
 	elif contact.gap < 0.0 and _since_touch > CONTACT_COOLDOWN:
 		# A foot ran into the ball: that is a touch, and it pushes the ball away.
 		_touch("contact", contact)
-	elif _direction_pending() and _since_touch > CONTACT_COOLDOWN \
+	elif _direction_pending() and not _sprint_rhythm() and _since_touch > CONTACT_COOLDOWN \
 			and (contact.gap < reach_for_ball or _ground(ball.position).distance_to(_hips()) <= lerpf(control_reach, grip_control_reach, _grip())):
 		# The player reaches for the ball: make the waiting change with this touch.
 		_touch("control")
@@ -656,7 +661,7 @@ func _steer(delta: float) -> void:
 		_touch("early")
 
 	var pending := _direction_pending()
-	if pending and not _was_pending and not _resting:
+	if pending and not _was_pending and not _resting and not _sprint_rhythm():
 		# A change is waiting: the player goes for the ball. The next touch
 		# moves to the very next foot swing, and a toe reaching for the ball
 		# can make it sooner still.
