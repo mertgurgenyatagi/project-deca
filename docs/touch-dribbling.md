@@ -69,6 +69,11 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   - **sprint:** a 10° lean forward, and a 5° lean back when easing off
   - It's applied after the animation, to the spine, neck and head only, so the feet are untouched. It eases in and out, and its exports set the angles and the easing.
   - It reads `Dribble.intent_turn()`, `intent_stop()` and `intent_sprint()`. It hasn't been tested yet.
+- **Grip at the start of a movement.** Grip is full at a standstill and fades out by `grip_until` (90%) of jog speed. While it's on, the player keeps the ball at their feet:
+  - touches every step (`grip_touch_steps` 1), blending to the normal rhythm as grip fades
+  - soft touches: the ball arrives at `grip_arrival_ratio` (90%) of the player's speed, so it hardly runs ahead
+  - slower moving off with the ball: acceleration is scaled down to `grip_acceleration` (60%). Movement without the ball is unchanged.
+  - At full jog speed the rhythm is the usual every-second-step run-and-catch. Touching every step at full speed was tried and felt pinned.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
 
 **Effect on the bench:**

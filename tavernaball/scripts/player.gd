@@ -547,7 +547,11 @@ func _top_speed() -> float:
 
 
 func _acceleration() -> float:
-	return sprint_acceleration if _sprinting else acceleration
+	var rate := sprint_acceleration if _sprinting else acceleration
+	if _dribble:
+		# Moving off with the ball is more careful.
+		rate *= _dribble.acceleration_scale()
+	return rate
 
 
 ## Signed turn from one yaw to another. A full about-face turns through the

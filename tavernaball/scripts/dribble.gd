@@ -50,6 +50,19 @@ enum Foot { LEFT, RIGHT }
 ## ...plus this (m/s), so touches from a standstill can still move it.
 @export var touch_speed_margin := 1.5
 
+@export_group("Grip")
+## At the start of a movement the player keeps the ball at their feet: grip
+## is full at a standstill and gone by this share of jog speed.
+@export var grip_until := 0.9
+## Steps between touches at full grip (1 = every step).
+@export var grip_touch_steps := 1
+## Ball's arrival speed at the next touch, as a share of the player's, at full
+## grip: soft touches, so the ball hardly runs ahead.
+@export var grip_arrival_ratio := 0.9
+## The player's acceleration at full grip, as a share of normal: moving off
+## with the ball is more careful than without it.
+@export var grip_acceleration := 0.6
+
 @export_group("Control")
 ## Steering on the ball between touches (m/s²) before the cap starts growing.
 @export var max_bend := 3.0
@@ -333,8 +346,9 @@ func _sim_step(s: Sim, dt: float) -> void:
 	var p := _player
 	var input := _effective_input
 	var top := p.sprint_speed if _latched_sprint else p.move_speed
-	var accel := p.sprint_acceleration if _latched_sprint else p.acceleration
 	var speed := s.speed
+	var accel := p.sprint_acceleration if _latched_sprint else p.acceleration
+	accel *= lerpf(1.0, grip_acceleration, _grip_at(speed))
 	match s.action:
 		Player.Action.BRAKE:
 			speed = move_toward(speed, 0.0, p.turnback_brake * dt)
@@ -413,11 +427,29 @@ func _touch_after(min_ahead: float, foot: int) -> void:
 ## shortened while the input points away from the facing.
 func _touch_steps() -> int:
 	var steps := lerpf(jog_touch_steps, sprint_touch_steps, _player.sprint_weight)
+	steps = lerpf(steps, grip_touch_steps, _grip())
 	var input := _latched_input
 	if input != Vector2.ZERO:
 		var off := absf(angle_difference(_player.yaw, atan2(input.x, input.y)))
 		steps *= clampf(1.0 - 0.5 * rad_to_deg(off) / turn_shorten_angle, 0.5, 1.0)
-	return maxi(roundi(steps), 2)
+	return maxi(roundi(steps), 1)
+
+
+## Scale on the player's acceleration: slower moving off while gripping the ball.
+func acceleration_scale() -> float:
+	if not holding():
+		return 1.0
+	return lerpf(1.0, grip_acceleration, _grip())
+
+
+## How firmly the ball is kept at the feet: 1 at a standstill, easing to 0 by
+## `grip_until` × jog speed.
+func _grip() -> float:
+	return _grip_at(_player.ground_velocity.length())
+
+
+func _grip_at(speed: float) -> float:
+	return 1.0 - smoothstep(0.0, grip_until * _player.move_speed, speed)
 
 
 ## Where the ball should next arrive, when, and how fast.
@@ -433,7 +465,8 @@ func _target() -> Array:
 			var weight := _player.sprint_weight_at(s.speed)
 			var offset := _contact_offset(_next_foot, fposmod(_next_touch_phase, 1.0), weight)
 			var target := _world(s.position, s.yaw, offset)
-			return [target, s.time, Vector3(s.velocity.x, 0.0, s.velocity.y) * arrival_speed_ratio]
+			var ratio := lerpf(arrival_speed_ratio, grip_arrival_ratio, _grip())
+			return [target, s.time, Vector3(s.velocity.x, 0.0, s.velocity.y) * ratio]
 		_resting = true
 	return _rest_target()
 
@@ -611,7 +644,11 @@ func _steer(delta: float) -> void:
 	var v := ball.velocity
 	var needed := (6.0 * (target - ball.position) - 2.0 * time * (2.0 * v + arrival)) / (time * time)
 	needed.y = 0.0
-	var honest := _planned_accel
+	# The segment's planned slowing, always against the ball's current motion
+	# (if steering has turned the ball round, slowing must not push it on).
+	var honest := Vector3.ZERO
+	if v.length() > 0.01:
+		honest = v.normalized() * minf(_planned_accel.dot(v.normalized()), 0.0)
 	if _resting:
 		# A resting plan's honest motion is just the ball rolling to a stop.
 		honest = -v.normalized() * ball.roll_deceleration if v.length() > 0.01 else Vector3.ZERO
