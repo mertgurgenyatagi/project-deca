@@ -34,7 +34,7 @@ tavernaball/
   addons/godot_mcp/              editor plugin + runtime bridges used by the godot-mcp server
 tools/anim_tests/                headless timing, foot-slide and recording scripts
 docs/initial-movement.md         this document
-HANDOVER.md                      working notes for the next session
+NOTES.md                         what the docs don't cover: preferences, gotchas, dropped ideas, open items
 .mcp.json                        godot-mcp server config for Claude Code
 ```
 
