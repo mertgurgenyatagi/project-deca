@@ -44,7 +44,9 @@ enum Foot { LEFT, RIGHT }
 ## Ball sits this far to the outside of the touching foot (m).
 @export var touch_side_offset := 0.04
 ## Ball's speed arriving at the next touch, as a share of the player's.
-@export var arrival_speed_ratio := 0.4
+@export var arrival_speed_ratio := 0.55
+## The same at a full sprint (lower = longer knocks).
+@export var sprint_arrival_ratio := 0.4
 ## A touch sends the ball at most this many times the player's speed...
 @export var touch_speed_ratio := 2.0
 ## ...plus this (m/s), so touches from a standstill can still move it.
@@ -52,8 +54,9 @@ enum Foot { LEFT, RIGHT }
 
 @export_group("Grip")
 ## At the start of a movement the player keeps the ball at their feet: grip
-## is full at a standstill and gone by this share of jog speed.
-@export var grip_until := 0.9
+## is full at a standstill and gone by this share of jog speed, fading
+## slowly at first and quickly near the end.
+@export var grip_until := 1.0
 ## Steps between touches at full grip (1 = every step).
 @export var grip_touch_steps := 1
 ## Ball's arrival speed at the next touch, as a share of the player's, at full
@@ -455,7 +458,10 @@ func _grip() -> float:
 
 
 func _grip_at(speed: float) -> float:
-	return 1.0 - smoothstep(0.0, grip_until * _player.move_speed, speed)
+	# Eases off gently at first and falls away only near the top, so grip
+	# lasts through most of the acceleration.
+	var x := clampf(speed / (grip_until * _player.move_speed), 0.0, 1.0)
+	return 1.0 - x * x
 
 
 ## Where the ball should next arrive, when, and how fast.
@@ -471,7 +477,8 @@ func _target() -> Array:
 			var weight := _player.sprint_weight_at(s.speed)
 			var offset := _contact_offset(_next_foot, fposmod(_next_touch_phase, 1.0), weight)
 			var target := _world(s.position, s.yaw, offset)
-			var ratio := lerpf(arrival_speed_ratio, grip_arrival_ratio, _grip())
+			var ratio := lerpf(arrival_speed_ratio, sprint_arrival_ratio, _player.sprint_weight)
+			ratio = lerpf(ratio, grip_arrival_ratio, _grip())
 			return [target, s.time, Vector3(s.velocity.x, 0.0, s.velocity.y) * ratio]
 		_resting = true
 	return _rest_target()

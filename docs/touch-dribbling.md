@@ -69,7 +69,7 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   - **sprint:** a 10° lean forward, and a 5° lean back when easing off
   - It's applied after the animation, to the spine, neck and head only, so the feet are untouched. It eases in and out, and its exports set the angles and the easing.
   - It reads `Dribble.intent_turn()`, `intent_stop()` and `intent_sprint()`. It hasn't been tested yet.
-- **Grip at the start of a movement.** Grip is full at a standstill and fades out by `grip_until` (90%) of jog speed. While it's on, the player keeps the ball at their feet:
+- **Grip at the start of a movement.** Grip is full at a standstill and fades out by `grip_until` (100%) of jog speed. It follows 1 − (speed ÷ limit)², so it eases off gently and falls away only near the top, which keeps it through most of the acceleration. While it's on, the player keeps the ball at their feet:
   - touches every step (`grip_touch_steps` 1), blending to the normal rhythm as grip fades
   - soft touches: the ball arrives at `grip_arrival_ratio` (90%) of the player's speed, so it hardly runs ahead
   - slower moving off with the ball: acceleration is scaled down to `grip_acceleration` (60%). Movement without the ball is unchanged.
@@ -80,7 +80,7 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
   3. **Grip means control:** at full grip the ball counts as at the feet up to `grip_control_reach` (0.75 m) from the hips, against `control_reach` (0.5 m) with no grip, so a waiting change is made at once.
 
   So rapid taps slow the player, which tightens the grip, which makes changes near instant. A straight run keeps the loose run-and-catch rhythm.
-  - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02–0.08 s, and 90% are made within 0.17–0.28 s. The ball averages 0.42–0.55 m from the hips, about where a touching toe meets it.
+  - **Measured** (bench `rapid taps`: a new direction every 0.15–0.35 s for 12 s): changes wait a median of 0.02 s, and 90% are made within 0.08–0.22 s. The ball averages 0.36–0.45 m from the hips. At a steady jog the ball runs out to 0.75 m (`arrival_speed_ratio` 0.55); the sprint keeps its 1.7 m knock (`sprint_arrival_ratio` 0.4).
   - With rules 1 and 3 off, the median is the same; the grip and steering slowdown already give it. But the slow tail is longer (0.22–0.31 s), and the player keeps more pace.
 - **Without the ball, nothing is gated.** The movement tests (`pes_timing`, `turnback_bench`, `start_bench`, `motion_test`, `sprint_test`) remove the ball, so they still measure pure movement.
 
@@ -133,7 +133,8 @@ While the player holds the ball, `player.gd` moves on the input the Dribble lets
 | Dribble | `touch_phase_offset` | 0.03 cycles |
 | Dribble | `toe_tip` | 0.06 m |
 | Dribble | `touch_side_offset` | 0.04 m |
-| Dribble | `arrival_speed_ratio` | 0.4 |
+| Dribble | `arrival_speed_ratio` | 0.55 (jog) |
+| Dribble | `sprint_arrival_ratio` | 0.4 |
 | Dribble | `touch_speed_ratio` | 2.0 |
 | Dribble | `touch_speed_margin` | 1.5 m/s |
 | Dribble | `max_bend` | 3 m/s² |
