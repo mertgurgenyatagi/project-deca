@@ -47,7 +47,7 @@ enum Foot { LEFT, RIGHT }
 ## Extra slowing along the ball's path (m/s²) allowed on top of the plan
 ## without counting as bend: a ball slowing down looks natural, one curving or
 ## speeding up does not.
-@export var free_braking := 6.0
+@export var free_braking := 8.0
 ## Free braking during a turnback's brake (m/s²): the ball is stopped hard
 ## so the player can turn with it.
 @export var turnback_braking := 12.0

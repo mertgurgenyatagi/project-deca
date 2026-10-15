@@ -4,8 +4,12 @@
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="Script" path="res://scripts/follow_camera.gd" id="3_camera"]
 [ext_resource type="PackedScene" path="res://scenes/ball.tscn" id="4_ball"]
+[ext_resource type="Script" path="res://scripts/debug_keys.gd" id="5_debug"]
 
 [node name="Main" type="Node3D"]
+
+[node name="DebugKeys" type="Node" parent="."]
+script = ExtResource("5_debug")
 
 [node name="Pitch" parent="." instance=ExtResource("1_pitch")]
 
